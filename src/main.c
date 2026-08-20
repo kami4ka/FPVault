@@ -19,6 +19,7 @@
 #include "console.h"
 #include "enctest.h"
 #include "capture.h"
+#include "recorder.h"
 #include "arm32.h"
 #include "f1c100s_gpio.h"
 #include "f1c100s_timer.h"
@@ -76,6 +77,7 @@ int main(void) {
                 t_sec -= TICKS_PER_SEC;
                 uptime_s++;
                 enctest_live_stats();
+                recorder_stats();
                 led ^= 1;
                 if(led)
                     gpio_pin_set(LED_PORT, LED_PIN);

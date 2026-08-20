@@ -17,6 +17,7 @@
 #include "jpegtab.h"
 #include "testpat.h"
 #include "capture.h"
+#include "recorder.h"
 #include "armv5_cache.h"
 #include "f1c100s_timer.h"
 
@@ -203,6 +204,8 @@ void enctest_live_tick(void) {
     live_last_len = (uint32_t)r;
     live_enc++;
     if(live_us_sum > 0xF0000000u) live_us_sum = 0; /* crude wrap guard */
+
+    recorder_on_frame(BSRING_BASE, (uint32_t)r, cfg.quality);
 }
 
 void enctest_live_stats(void) {

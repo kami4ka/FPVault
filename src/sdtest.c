@@ -23,6 +23,10 @@ extern uint32_t disk_toggle_width(void);
 static FATFS fs;
 static int mounted = 0;
 
+int sdtest_is_mounted(void) {
+    return mounted;
+}
+
 void sdtest_toggle_width(void) {
     uint32_t w = disk_toggle_width();
     mounted = 0;

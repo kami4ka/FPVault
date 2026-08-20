@@ -18,6 +18,7 @@
 #include "enctest.h"
 #include "sdtest.h"
 #include "capture.h"
+#include "recorder.h"
 
 extern uint32_t sys_uptime_s(void);
 
@@ -61,6 +62,7 @@ static void dispatch(char c) {
         capture_stop();
         printf("[cap] TVD DMA disabled\r\n");
         break;
+    case 'R': recorder_toggle(); break;
     case '0':
     case '1':
     case '2':
