@@ -70,6 +70,16 @@ static void dispatch(char c) {
         break;
     case 'R': recorder_toggle(); break;
     case 'A': recorder_toggle_auto(); break;
+    case 'S': {
+        /* M7 fault injection: stall the SD consumer for 500 ms. The IRQ
+         * pipeline must keep capturing and the ring must absorb it with
+         * zero drops (watch the next stats line's ring hi-water). */
+        uint32_t t0 = tim_get_cnt(TIM0);
+        printf("[test] stalling main loop 500 ms\r\n");
+        while((uint32_t)(t0 - tim_get_cnt(TIM0)) < TICKS_PER_SEC / 2u)
+            wdg_feed();
+        break;
+    }
     case '8':
         capture_force_colormode(0);
         printf("[cap] forced NTSC color\r\n");
