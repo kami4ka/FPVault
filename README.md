@@ -39,19 +39,19 @@ CVBS camera ──> TVD (TV decoder, own DMA) ──> DDR (semi-planar YUV422 ri
 Early bring-up. Milestones:
 
 - [x] M0 — skeleton: build, boot via U-Boot, console, LED, watchdog
-- [ ] M1 — Cedar VE bring-up, first hardware-encoded JPEG (go/no-go)
-      — *firmware complete (`j` + tools/vedump.py), awaiting bench time*
-- [ ] M2 — SD 4-bit + IDMAC DMA + FatFs + write benchmark
-- [ ] M3 — live TVD capture → continuous hardware encode
-      — *capture ring extracted from passthru, unwired*
-- [ ] M4 — AVI muxer, first real recording, power-pull safety
-      — *muxer + checkavi.py done and host-tested (ffprobe/PIL clean)*
-- [ ] M5 — recorder state machine, DCF clip naming, boot index scan
-      — *dcf module done and host-tested*
-- [ ] M6 — RunCam protocol + GPIO record pin + LED UX
-      — *protocol parser done and host-tested (10k-frame fuzz)*
+- [x] M1 — Cedar VE hardware JPEG: **2.9 ms/frame on silicon** (VE 1663)
+- [x] M2 — SD 4-bit + FatFs: **7.8 MB/s sustained, 64 MB bit-verified**
+- [x] M3 — live capture → encode: **full 29.97 fps, IRQ pipeline, 0 drops**
+- [x] M4 — crash-safe AVI recording with true color (TVD 4:2:0 → NV12)
+- [x] M5 — autonomous recorder: auto-record on signal, 5-min segments,
+      DCF naming, dropout policy, LED state UX
+- [x] M6 — RunCam Device Protocol live on UART1 (Betaflight/INAV/ArduPilot)
+      — *bench-tested against the fuzz suite; real-FC session pending*
 - [ ] M7 — endurance and fault-injection hardening
 - [ ] M8 — standalone SPI-NOR boot image, v1.0
+
+Power the board with a card inserted and it records — no host, no
+commands. See docs/img/final-true-color.png for what it sees.
 
 Host test suite: `make -C tests/host` (no cross-toolchain needed).
 
