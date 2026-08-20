@@ -12,6 +12,8 @@
 #include "io.h"
 #include "f1c100s_periph.h"
 #include "f1c100s_tvd.h"
+#include "f1c100s_de.h"
+#include "f1c100s_tve.h"
 
 #define NBUF CAP_NBUF
 
@@ -112,6 +114,15 @@ void capture_set_fmt(cap_fmt_e f) {
 }
 
 void capture_init(void) {
+    /* The TV ENCODER must be initialized even though this firmware never
+     * outputs video: the TVE and TVD share the analog block, and without
+     * tve_init's clock + DAC/analog register setup the TVD demodulates
+     * chroma at ~1/3 amplitude - the picture decodes but is nearly
+     * greyscale. Measured: mean chroma saturation 5.6 without, 17.1 with
+     * (identical scene); a red calibration target read back NEUTRAL until
+     * this line existed. Luma is unaffected either way, which is what let
+     * the record-only bring-up look correct for so long. */
+    tve_init(TVE_MODE_NTSC);
     tvd_init(TVD_MODE_NTSC, CAPY[0], CAPC[0], 0);
     capture_set_standard(VID_NTSC);
 }
