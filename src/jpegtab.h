@@ -36,4 +36,4 @@ uint32_t jpegtab_headers(uint8_t* dst, const uint16_t qY[64], const uint16_t qC[
                          uint16_t w, uint16_t h, int samp_2x2);
 
 #define JPEGTAB_PREFIX_MAX 576
-#define JPEGTAB_HDR_LEN 605u /* prefix 572 + SOF0 19 + SOS 14 */
+#define JPEGTAB_HDR_LEN 608u /* prefix 572 + SOF0 19 + 3 fill + SOS 14 */

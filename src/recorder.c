@@ -57,6 +57,9 @@ static int fs_make_dir(void* ctx, const char* path) {
 }
 static const dcf_ops_t fs_ops = {0, fs_list_dir, fs_make_dir};
 
+/* 200 MB covers a 5-minute segment with margin at D1 quality-75 rates. */
+#define REC_PREALLOC (200u * 1024u * 1024u)
+
 /* ---- state --------------------------------------------------------------- */
 static avi_t avi;
 static dcf_t dcf;
@@ -75,6 +78,7 @@ int recorder_active(void) {
 void recorder_toggle(void) {
     if(recording) {
         avi_finalize(&avi);
+        f_truncate(&clip); /* drop the unused preallocated tail */
         f_close(&clip);
         recording = 0;
         printf("[rec] STOP %s: %lu frames, %lu drops\r\n", clip_path,
@@ -99,6 +103,20 @@ void recorder_toggle(void) {
     }
     if(f_open(&clip, clip_path, FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) {
         printf("[rec] open %s failed\r\n", clip_path);
+        return;
+    }
+    /* Preallocate the whole segment contiguously and sync ONCE, up front:
+     * the directory entry then already carries the full size, so no
+     * periodic f_sync is needed during recording (f_sync under the IRQ
+     * pipeline hard-crashed the board - unexplained, on the debt list -
+     * and this design is crash-safer anyway: the FAT chain is written
+     * once, before the first frame). The header-refresh seek-away already
+     * forces FatFs to flush the header sector each second. */
+    if(f_expand(&clip, REC_PREALLOC, 1) != FR_OK)
+        printf("[rec] prealloc failed - recording without it\r\n");
+    if(f_sync(&clip) != FR_OK) {
+        printf("[rec] initial sync failed\r\n");
+        f_close(&clip);
         return;
     }
     {
@@ -171,11 +189,11 @@ void recorder_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) 
     (void)total;
     frames_written++;
 
-    /* Crash safety: refresh the header + sync about once a second. */
+    /* Crash safety: refresh the header about once a second (the seek
+     * back and forth flushes the header sector through FatFs). */
     if(frames_written - last_refresh_frame >= 30u) {
         last_refresh_frame = frames_written;
         avi_refresh_header(&avi);
-        io_sync(0);
     }
 }
 

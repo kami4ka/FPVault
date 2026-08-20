@@ -157,6 +157,13 @@ uint32_t jpegtab_headers(uint8_t* dst, const uint16_t qY[64], const uint16_t qC[
     *p++ = 3;
     *p++ = 0x11;
     *p++ = 1;
+    /* Three fill bytes (0xFF before a marker is legal padding, T.81
+     * B.1.1.2) round the header block to 608 bytes, so the AVI chunk that
+     * precedes it by 8 starts 4-byte aligned - the SD driver word-casts
+     * transfer buffers and ARM926 silently rotates misaligned loads. */
+    *p++ = 0xFF;
+    *p++ = 0xFF;
+    *p++ = 0xFF;
     /* SOS */
     p = put_marker(p, 0xDA, 2 + 1 + 2 * 3 + 3);
     *p++ = 3;

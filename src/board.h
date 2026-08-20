@@ -57,8 +57,8 @@
  * programming slot+640 landed the stream at slot+0. The 605-byte header
  * block is SOI+DQT+DHT+SOF0+SOS (all CPU-side; see jpegtab.h for why the
  * hardware cannot emit markers). */
-#define BSRING_CHUNK_OFF  411u  /* 8-byte '00dc'+len */
-#define BSRING_PREFIX_OFF 419u  /* 605-byte JPEG header block */
+#define BSRING_CHUNK_OFF  408u  /* 8-byte '00dc'+len, 4-byte aligned */
+#define BSRING_PREFIX_OFF 416u  /* 608-byte JPEG header block */
 #define BSRING_DATA_OFF   1024u /* VE VLE output base (1 KB aligned) */
 
 #define IDX_BASE          (BSRING_BASE + BSRING_SIZE)        /* 0x83200000 */
