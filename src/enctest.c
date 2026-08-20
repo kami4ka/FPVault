@@ -23,8 +23,8 @@
 #define PAT_H 480u
 #define PAT_Y (TESTPAT_BASE)
 #define PAT_C (TESTPAT_BASE + 0x200000u)
-#define OUT_PHYS (BSRING_BASE + 64u)
-#define OUT_MAX (BSRING_SLOT_SIZE - 64u)
+#define OUT_PHYS (BSRING_BASE + BSRING_DATA_OFF)
+#define OUT_MAX (BSRING_SLOT_SIZE - BSRING_DATA_OFF)
 
 static vejpeg_cfg_t cfg = {
     .w = PAT_W, .h = PAT_H, .isp_fmt = 0 /* NV12 */, .samp_2x2 = 1, .quality = 75};

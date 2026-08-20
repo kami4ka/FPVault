@@ -51,6 +51,11 @@
 #define BSRING_SLOTS      40u
 #define BSRING_SLOT_SIZE  0x40000u               /* 256 KB */
 #define BSRING_SIZE       (BSRING_SLOTS * BSRING_SLOT_SIZE)  /* 10 MB */
+/* In-slot offsets: one contiguous AVI chunk = header + JPEG prefix + VE
+ * bitstream + EOI; the VE output lands 64-byte aligned (docs/ARCHITECTURE). */
+#define BSRING_CHUNK_OFF  60u   /* 8-byte '00dc'+len */
+#define BSRING_PREFIX_OFF 68u   /* 572-byte SOI+DQT+DHT */
+#define BSRING_DATA_OFF   640u  /* VE VLE output base */
 
 #define IDX_BASE          (BSRING_BASE + BSRING_SIZE)        /* 0x83200000 */
 #define IDX_SIZE          0x100000u              /* 1 MB: 16 B/frame ~ 36 min */

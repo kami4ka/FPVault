@@ -40,13 +40,20 @@ Early bring-up. Milestones:
 
 - [x] M0 — skeleton: build, boot via U-Boot, console, LED, watchdog
 - [ ] M1 — Cedar VE bring-up, first hardware-encoded JPEG (go/no-go)
+      — *firmware complete (`j` + tools/vedump.py), awaiting bench time*
 - [ ] M2 — SD 4-bit + IDMAC DMA + FatFs + write benchmark
 - [ ] M3 — live TVD capture → continuous hardware encode
+      — *capture ring extracted from passthru, unwired*
 - [ ] M4 — AVI muxer, first real recording, power-pull safety
+      — *muxer + checkavi.py done and host-tested (ffprobe/PIL clean)*
 - [ ] M5 — recorder state machine, DCF clip naming, boot index scan
+      — *dcf module done and host-tested*
 - [ ] M6 — RunCam protocol + GPIO record pin + LED UX
+      — *protocol parser done and host-tested (10k-frame fuzz)*
 - [ ] M7 — endurance and fault-injection hardening
 - [ ] M8 — standalone SPI-NOR boot image, v1.0
+
+Host test suite: `make -C tests/host` (no cross-toolchain needed).
 
 ## Building
 
