@@ -16,6 +16,7 @@
 #include "f1c100s_uart.h"
 #include "f1c100s_timer.h"
 #include "enctest.h"
+#include "sdtest.h"
 
 extern uint32_t sys_uptime_s(void);
 
@@ -47,6 +48,10 @@ static void dispatch(char c) {
     case 'b': enctest_toggle_hdr(); break;
     case 'w': enctest_wipe_slot(); break;
     case 'd': enctest_scan_slot(); break;
+    case 'M': sdtest_mount(); break;
+    case 'Z': sdtest_scrub(); break;
+    case 'B': sdtest_benchmark(); break;
+    case 'W': sdtest_toggle_width(); break;
     case '0':
     case '1':
     case '2':

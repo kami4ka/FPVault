@@ -20,7 +20,11 @@ LINK_SCRIPT = src/f1c200s_dvr.ld
 # OBJS immediately, so anything appended afterwards is silently dropped.
 SRCS += src/main.c src/system.c src/exception.c src/console.c src/capture.c \
         src/ve.c src/vejpeg.c src/jpegtab.c src/testpat.c src/enctest.c \
-        src/avi.c src/dcf.c src/runcam.c
+        src/avi.c src/dcf.c src/runcam.c \
+        src/sdc.c src/sdcard.c src/diskio.c src/sdtest.c \
+        vendor/fatfs/ff.c vendor/fatfs/ffsystem.c vendor/fatfs/ffunicode.c
+
+INCLUDES += -Ivendor/fatfs
 
 INCLUDES += -Isrc
 

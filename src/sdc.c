@@ -1,9 +1,30 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * sdc.c - SD/MMC host driver, forked from F1C100s_projects f1c100s_sdc.c
+ * (GPL-3) with the reliability fixes the DVR needs:
+ *
+ *   - every wait is bounded by TIM0 wall-clock time instead of a bare
+ *     iteration count (10000 register polls is ~1 ms; a card mid garbage
+ *     collection stays busy for hundreds of ms - the old busy waits could
+ *     false-fail, and the FIFO/completion waits could hang forever, which
+ *     is how the 6 s watchdog got tripped mid-mount);
+ *   - the watchdog is fed inside every wait, so a slow-but-legal card
+ *     cannot reboot the board (a reboot with an unscrubbed card on the
+ *     BROM's SD-first boot path is how the board got wedged - twice).
+ */
 #include <stdint.h>
 #include <stddef.h>
 #include "io.h"
 #include "f1c100s_sdc.h"
 #include "f1c100s_gpio.h"
 #include "f1c100s_clock.h"
+#include "f1c100s_timer.h"
+
+/* TIM0 free-runs down at 24 MHz (started in main before any SD use). */
+#define SDC_MS(ms) ((uint32_t)(ms) * 24000u)
+static inline uint32_t sdc_elapsed(uint32_t t0) {
+    return (uint32_t)(t0 - tim_get_cnt(TIM0));
+}
 
 static uint8_t sdc_transfer_command(uint32_t sdc_base, sdc_cmd_t* cmd, sdc_data_t* dat);
 static uint8_t
@@ -16,13 +37,14 @@ static uint8_t sdc_update_clock(uint32_t sdc_base);
 static uint8_t sdc_transfer_command(uint32_t sdc_base, sdc_cmd_t* cmd, sdc_data_t* dat) {
     uint32_t cmdval = SDC_START;
     uint32_t status = 0;
-    int timeout     = 0;
+
 
     if(cmd->cmdidx == MMC_STOP_TRANSMISSION) {
-        timeout = 10000;
+        uint32_t t0 = tim_get_cnt(TIM0);
         do {
+            wdg_feed();
             status = read32(sdc_base + SDC_STAR);
-            if(!timeout--) {
+            if(sdc_elapsed(t0) > SDC_MS(2000)) {
                 write32(sdc_base + SDC_GCTL, SDC_HARDWARE_RESET);
                 write32(sdc_base + SDC_RISR, 0xFFFFFFFF);
                 return 0;
@@ -51,21 +73,25 @@ static uint8_t sdc_transfer_command(uint32_t sdc_base, sdc_cmd_t* cmd, sdc_data_
     if(dat != NULL) write32(sdc_base + SDC_GCTL, read32(sdc_base + SDC_GCTL) | 0x80000000);
     write32(sdc_base + SDC_CMDR, cmdval | cmd->cmdidx);
 
-    timeout = 10000;
-    do {
-        status = read32(sdc_base + SDC_RISR);
-        if(!timeout-- || (status & SDC_INTERRUPT_ERROR_BIT)) {
-            write32(sdc_base + SDC_GCTL, SDC_HARDWARE_RESET);
-            write32(sdc_base + SDC_RISR, 0xFFFFFFFF);
-            return 0;
-        }
-    } while(!(status & SDC_COMMAND_DONE));
+    {
+        uint32_t t0 = tim_get_cnt(TIM0);
+        do {
+            wdg_feed();
+            status = read32(sdc_base + SDC_RISR);
+            if(sdc_elapsed(t0) > SDC_MS(500) || (status & SDC_INTERRUPT_ERROR_BIT)) {
+                write32(sdc_base + SDC_GCTL, SDC_HARDWARE_RESET);
+                write32(sdc_base + SDC_RISR, 0xFFFFFFFF);
+                return 0;
+            }
+        } while(!(status & SDC_COMMAND_DONE));
+    }
 
     if(cmd->resptype & MMC_RESP_BUSY) {
-        timeout = 10000;
+        uint32_t t0 = tim_get_cnt(TIM0);
         do {
+            wdg_feed();
             status = read32(sdc_base + SDC_STAR);
-            if(!timeout--) {
+            if(sdc_elapsed(t0) > SDC_MS(2000)) {
                 write32(sdc_base + SDC_GCTL, SDC_HARDWARE_RESET);
                 write32(sdc_base + SDC_RISR, 0xFFFFFFFF);
                 return 0;
@@ -91,6 +117,7 @@ static uint8_t
     uint32_t* tmp  = buf;
     uint32_t status, err, done;
 
+    uint32_t t0 = tim_get_cnt(TIM0);
     status = read32(sdc_base + SDC_STAR);
     err    = read32(sdc_base + SDC_RISR) & SDC_INTERRUPT_ERROR_BIT;
     while((!err) && (count >= sizeof(uint32_t))) {
@@ -98,18 +125,24 @@ static uint8_t
             *(tmp) = read32(sdc_base + SDC_FIFO);
             tmp++;
             count -= sizeof(uint32_t);
+        } else {
+            wdg_feed();
+            if(sdc_elapsed(t0) > SDC_MS(2000)) return 0;
         }
         status = read32(sdc_base + SDC_STAR);
         err    = read32(sdc_base + SDC_RISR) & SDC_INTERRUPT_ERROR_BIT;
     }
 
+    t0 = tim_get_cnt(TIM0);
     do {
+        wdg_feed();
         status = read32(sdc_base + SDC_RISR);
         err    = status & SDC_INTERRUPT_ERROR_BIT;
         if(blkcount > 1)
             done = status & SDC_AUTO_COMMAND_DONE;
         else
             done = status & SDC_DATA_OVER;
+        if(sdc_elapsed(t0) > SDC_MS(2000)) return 0;
     } while(!done && !err);
 
     if(err & SDC_INTERRUPT_ERROR_BIT) return 0;
@@ -125,6 +158,7 @@ static uint8_t
     uint32_t* tmp  = buf;
     uint32_t status, err, done;
 
+    uint32_t t0 = tim_get_cnt(TIM0);
     status = read32(sdc_base + SDC_STAR);
     err    = read32(sdc_base + SDC_RISR) & SDC_INTERRUPT_ERROR_BIT;
     while(!err && (count > 0)) {
@@ -132,18 +166,24 @@ static uint8_t
             write32(sdc_base + SDC_FIFO, *tmp);
             tmp++;
             count -= sizeof(uint32_t);
+        } else {
+            wdg_feed();
+            if(sdc_elapsed(t0) > SDC_MS(2000)) return 0;
         }
         status = read32(sdc_base + SDC_STAR);
         err    = read32(sdc_base + SDC_RISR) & SDC_INTERRUPT_ERROR_BIT;
     }
 
+    t0 = tim_get_cnt(TIM0);
     do {
+        wdg_feed();
         status = read32(sdc_base + SDC_RISR);
         err    = status & SDC_INTERRUPT_ERROR_BIT;
         if(blkcount > 1)
             done = status & SDC_AUTO_COMMAND_DONE;
         else
             done = status & SDC_DATA_OVER;
+        if(sdc_elapsed(t0) > SDC_MS(2000)) return 0;
     } while(!done && !err);
 
     if(err & SDC_INTERRUPT_ERROR_BIT) return 0;
