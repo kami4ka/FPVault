@@ -15,6 +15,7 @@
 #include "f1c100s_periph.h"
 #include "f1c100s_uart.h"
 #include "f1c100s_timer.h"
+#include "enctest.h"
 
 extern uint32_t sys_uptime_s(void);
 
@@ -37,8 +38,13 @@ static void dispatch(char c) {
     switch(c) {
     case 's': cmd_state(); break;
     case 'r': cmd_reset(); break;
+    case 'j': enctest_encode(1); break;
+    case 'J': enctest_encode(0); break;
+    case 'q': enctest_cycle_quality(); break;
+    case 'm': enctest_cycle_fmt(); break;
+    case 'v': enctest_info(); break;
     default:
-        printf("? s state, r reset\r\n");
+        printf("? s state, r reset | VE: j enc+dump, J enc, q quality, m fmt, v info\r\n");
         break;
     }
 }

@@ -17,6 +17,7 @@
 #include "board.h"
 #include "system.h"
 #include "console.h"
+#include "enctest.h"
 #include "arm32.h"
 #include "f1c100s_gpio.h"
 #include "f1c100s_timer.h"
@@ -44,6 +45,9 @@ int main(void) {
     tim_init(TIM0, TIM_MODE_CONT, TIM_SRC_HOSC, TIM_PSC_1);
     tim_set_period(TIM0, 0xFFFFFFFF);
     tim_start(TIM0);
+
+    /* M1: Cedar VE bring-up + test-pattern encoder ('j' on the console). */
+    enctest_init();
 
     {
         uint32_t t_sec = tim_get_cnt(TIM0);

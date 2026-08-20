@@ -18,7 +18,8 @@ LINK_SCRIPT = src/f1c200s_dvr.ld
 
 # SRCS must be complete BEFORE the include below - f1c100s_common.mk expands
 # OBJS immediately, so anything appended afterwards is silently dropped.
-SRCS += src/main.c src/system.c src/exception.c src/console.c
+SRCS += src/main.c src/system.c src/exception.c src/console.c \
+        src/ve.c src/vejpeg.c src/jpegtab.c src/testpat.c src/enctest.c
 
 INCLUDES += -Isrc
 
