@@ -129,18 +129,30 @@ void recorder_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) 
 
     if(!recording) return;
 
-    /* Stage the JFIF prefix into the slot once per quality change - it is
-     * constant between changes and part of every chunk. */
-    if(quality != staged_quality) {
-        uint16_t qY[64], qC[64];
-        jpegtab_quant(quality, qY, qC);
-        jpegtab_prefix(slot + BSRING_PREFIX_OFF, qY, qC);
-        staged_quality = quality;
+    /* NB: hdr buffer is JPEGTAB_HDR_LEN and capture.h provides the height.
+     * Stage the full JPEG header block (SOI..SOS) into the slot. Tables
+     * change with quality, geometry with the standard - recompute on
+     * change, copy always (605 bytes, ~us; every slot in the rotating
+     * ring needs its own copy). */
+    {
+        static uint8_t hdr[JPEGTAB_HDR_LEN];
+        static uint16_t staged_h = 0;
+        uint16_t h = capture_height();
+        uint32_t i;
+        if(quality != staged_quality || h != staged_h) {
+            uint16_t qY[64], qC[64];
+            jpegtab_quant(quality, qY, qC);
+            jpegtab_headers(hdr, qY, qC, CAP_FW, h, 1);
+            staged_quality = quality;
+            staged_h = h;
+        }
+        for(i = 0; i < JPEGTAB_HDR_LEN; i++)
+            slot[BSRING_PREFIX_OFF + i] = hdr[i];
     }
 
     /* EOI + zero pad after the hardware bitstream, chunk header up front:
      * one contiguous '00dc' chunk, one f_write. */
-    jpeg_len = 572u + bitstream_len + 2u;
+    jpeg_len = JPEGTAB_HDR_LEN + bitstream_len + 2u;
     slot[BSRING_DATA_OFF + bitstream_len] = 0xFF;
     slot[BSRING_DATA_OFF + bitstream_len + 1] = 0xD9;
     pad = (4u - (jpeg_len & 3u)) & 3u;

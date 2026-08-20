@@ -45,5 +45,9 @@ void vejpeg_start(const vejpeg_cfg_t* cfg, uint32_t phy_y, uint32_t phy_c,
 #define VEJPEG_ERR_FAILED  (-2)
 int32_t vejpeg_wait(uint32_t timeout_us);
 
+/* Non-blocking check: VEJPEG_ERR_TIMEOUT while still encoding, else the
+ * length (or FAILED) with status cleared. For the IRQ-driven pipeline. */
+int32_t vejpeg_poll_done(void);
+
 /* Raw AVC status nibble, for diagnostics (0 none, 1 done, 2 failed). */
 uint32_t vejpeg_status(void);

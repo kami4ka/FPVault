@@ -12,58 +12,6 @@
 
 uint32_t vejpeg_dbg_hdr_len, vejpeg_dbg_hdr_off;
 
-/* Push raw bits into the VLE bitstream through the basic-bits port. */
-static void put_bits(uint8_t nbits, uint32_t data) {
-    ve_w(VE_AVC_BASIC_BITS, data);
-    ve_w(VE_AVC_TRIGGER, (1u << 16) | ((uint32_t)(nbits & 0x3f) << 8) | 1u);
-}
-
-/* SOF0: baseline DCT frame header. Y sampling 2x2 (4:2:0) or 2x1 (4:2:2);
- * chroma always 1x1, quant table 0 for Y, 1 for C. 19 bytes, so the
- * following SOS stays byte-aligned. */
-static void put_sof0(uint16_t w, uint16_t h, int samp_2x2) {
-    put_bits(16, 0xffc0);
-    put_bits(16, 2 + 1 + 2 + 2 + 1 + 3 * 3);
-    put_bits(8, 8); /* precision */
-    put_bits(16, h);
-    put_bits(16, w);
-    put_bits(8, 3); /* components */
-    put_bits(8, 1); /* Y  */
-    put_bits(4, 2);
-    put_bits(4, samp_2x2 ? 2 : 1);
-    put_bits(8, 0);
-    put_bits(8, 2); /* Cb */
-    put_bits(4, 1);
-    put_bits(4, 1);
-    put_bits(8, 1);
-    put_bits(8, 3); /* Cr */
-    put_bits(4, 1);
-    put_bits(4, 1);
-    put_bits(8, 1);
-}
-
-/* SOS: 14 bytes. Proper baseline spectral bounds (Ss=0, Se=63) - jepoc
- * emitted zeros there because libjpeg left them uninitialized; the hardware
- * treats these bits as opaque payload either way. */
-static void put_sos(void) {
-    put_bits(16, 0xffda);
-    put_bits(16, 2 + 1 + 2 * 3 + 3);
-    put_bits(8, 3);
-    put_bits(8, 1);
-    put_bits(4, 0);
-    put_bits(4, 0);
-    put_bits(8, 2);
-    put_bits(4, 1);
-    put_bits(4, 1);
-    put_bits(8, 3);
-    put_bits(4, 1);
-    put_bits(4, 1);
-    put_bits(8, 0);  /* Ss */
-    put_bits(8, 63); /* Se */
-    put_bits(4, 0);  /* Ah */
-    put_bits(4, 0);  /* Al */
-}
-
 void vejpeg_start(const vejpeg_cfg_t* cfg, uint32_t phy_y, uint32_t phy_c,
                   uint32_t phy_out, uint32_t out_size) {
     uint16_t qY[64], qC[64];
@@ -95,11 +43,10 @@ void vejpeg_start(const vejpeg_cfg_t* cfg, uint32_t phy_y, uint32_t phy_c,
     st = ve_r(VE_AVC_STATUS);
     ve_w(VE_AVC_STATUS, st | 0xf);
 
-    /* headers into the bitstream */
-    if(!cfg->no_hdr) {
-        put_sof0(cfg->w, cfg->h, cfg->samp_2x2);
-        put_sos();
-    }
+    /* NO header push: on VE 1663 the basic-bits port routes pushed bytes
+     * through the JPEG byte stuffer (FF C0 -> FF 00 C0, corrupted marker),
+     * so SOF0/SOS live in the CPU-built file header (jpegtab_headers) and
+     * the hardware stream is the pure entropy scan. */
     vejpeg_dbg_hdr_len = ve_r(VE_AVC_VLE_LENGTH);
     vejpeg_dbg_hdr_off = ve_r(VE_AVC_VLE_OFFSET);
 
@@ -129,20 +76,31 @@ uint32_t vejpeg_status(void) {
     return ve_r(VE_AVC_STATUS) & 0xf;
 }
 
+int32_t vejpeg_poll_done(void) {
+    uint32_t st = vejpeg_status();
+    if(st & 1) {
+        uint32_t len = ve_r(VE_AVC_VLE_LENGTH) / 8;
+        ve_w(VE_AVC_STATUS, ve_r(VE_AVC_STATUS) | 0xf);
+        /* VE 1663: the VLE write offset carries over into the next encode
+         * (measured: stream landed prev_len into the next buffer). The
+         * offset write is ignored during setup but taken here, with the
+         * engine idle right after completion. */
+        ve_w(VE_AVC_VLE_OFFSET, 0);
+        return (int32_t)len;
+    }
+    if(st & 2) {
+        ve_w(VE_AVC_STATUS, ve_r(VE_AVC_STATUS) | 0xf);
+        ve_w(VE_AVC_VLE_OFFSET, 0);
+        return VEJPEG_ERR_FAILED;
+    }
+    return VEJPEG_ERR_TIMEOUT;
+}
+
 int32_t vejpeg_wait(uint32_t timeout_us) {
     uint32_t t0 = tim_get_cnt(TIM0); /* down-counter at 24 MHz */
-    uint32_t st;
     for(;;) {
-        st = vejpeg_status();
-        if(st & 1) {
-            uint32_t len = ve_r(VE_AVC_VLE_LENGTH) / 8;
-            ve_w(VE_AVC_STATUS, ve_r(VE_AVC_STATUS) | 0xf);
-            return (int32_t)len;
-        }
-        if(st & 2) {
-            ve_w(VE_AVC_STATUS, ve_r(VE_AVC_STATUS) | 0xf);
-            return VEJPEG_ERR_FAILED;
-        }
+        int32_t r = vejpeg_poll_done();
+        if(r != VEJPEG_ERR_TIMEOUT) return r;
         if((uint32_t)(t0 - tim_get_cnt(TIM0)) / 24u > timeout_us)
             return VEJPEG_ERR_TIMEOUT;
     }

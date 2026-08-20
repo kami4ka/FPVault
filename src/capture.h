@@ -39,9 +39,10 @@ void capture_stop(void); /* disable the TVD DMA (diagnostics) */
 void capture_set_standard(vid_std_e s);
 void capture_set_fmt(cap_fmt_e f); /* re-inits the ring */
 
-/* Frame-done check + ring advance. Call often (main loop or a 1 kHz timer
- * IRQ). Returns 1 when a newly completed frame became available. */
-int capture_poll(void);
+/* Two-phase frame advance (arm early on the ARM sentinel, rotate on the
+ * DONE sentinel). Call at ~1 kHz from a timer IRQ. Returns 1 when a newly
+ * completed frame became available via capture_prev(). */
+int capture_tick(void);
 
 /* Buffer index of the most recently COMPLETED frame (the only one safe to
  * read), or -1 before the first completion. Valid until the next two

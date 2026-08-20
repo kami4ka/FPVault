@@ -39,6 +39,7 @@ static int done = -1; /* just completed - the TVD may still touch it if the
                        * addr latch race was lost; NOT safe to read */
 static int safe = -1; /* completed one full cycle ago - the TVD has provably
                        * moved on; the only buffer consumers may read */
+static uint8_t armed = 0; /* next buffer address handed to the TVD early */
 
 static uint32_t frames = 0, std_switches = 0;
 
@@ -87,6 +88,7 @@ void capture_set_standard(vid_std_e s) {
     wr = 0;
     done = -1;
     safe = -1;
+    armed = 0;
 
     tvd_set_mode(s == VID_PAL ? TVD_MODE_PAL_B : TVD_MODE_NTSC);
     tvd_set_out_fmt(fmt == CAP_FMT_420 ? TVD_FMT_420_PL : TVD_FMT_422_PL);
@@ -121,23 +123,38 @@ void capture_stop(void) {
 }
 
 /* ---- frame completion ---------------------------------------------------- */
-int capture_poll(void) {
-    if(!row_erased(wr, SENT_DONE_ROW)) return 0;
-    /* Arm on completion; consumers get the buffer completed one full cycle
-     * EARLIER, never the one that just finished. Losing the latch race
-     * (about one frame in nine at passthru's poll rate) means the TVD keeps
-     * writing the just-done buffer until the next field boundary - reading
-     * it then shows a truncated frame with a stale tail. The extra cycle of
-     * delay is what makes a lost race cost a repeated frame, never a torn
-     * one. (This firmware initially consumed `done` and every capture had a
-     * grey bottom third - measured, not theoretical.) */
-    safe = done;
-    done = wr;
-    wr = (wr + 1) % NBUF;
-    tvd_set_out_buf(CAPY[wr], CAPC[wr]);
-    sentinel_stamp(wr);
-    frames++;
-    return safe >= 0;
+/* Two-phase advance, the full passthru two-row design - the arm-on-DONE
+ * shortcut only survives a free-running poll loop (and even there lost the
+ * latch race one frame in nine). At a 1 kHz tick it loses almost always:
+ * the DONE row is written moments before the field boundary the latch
+ * needs, so a ~1 ms detection latency arms too late, the TVD re-enters the
+ * "completed" buffer, and recorded frames come out torn (measured: comb
+ * artifacts + grey tails in the first recording).
+ *
+ *   ARM  row, ~80% down and forced odd (late in the SECOND field): arming
+ *        here leaves ~4 ms of margin to the frame-end boundary - the next
+ *        buffer address latches cleanly at the frame end, no tail loss, no
+ *        race a 1 kHz tick can lose;
+ *   DONE row (last): confirms the buffer is complete, then the ring
+ *        rotates. Consumers still get the buffer completed one full cycle
+ *        earlier - belt and braces.
+ */
+int capture_tick(void) {
+    if(!armed && row_erased(wr, SENT_ARM_ROW)) {
+        int nx = (wr + 1) % NBUF;
+        tvd_set_out_buf(CAPY[nx], CAPC[nx]);
+        armed = 1;
+    }
+    if(armed && row_erased(wr, SENT_DONE_ROW)) {
+        safe = done;
+        done = wr;
+        wr = (wr + 1) % NBUF;
+        sentinel_stamp(wr);
+        armed = 0;
+        frames++;
+        return safe >= 0;
+    }
+    return 0;
 }
 
 int capture_prev(void) {

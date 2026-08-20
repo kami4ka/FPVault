@@ -19,6 +19,7 @@
 #include "sdtest.h"
 #include "capture.h"
 #include "recorder.h"
+#include "pipeline.h"
 
 extern uint32_t sys_uptime_s(void);
 
@@ -41,7 +42,12 @@ static void dispatch(char c) {
     switch(c) {
     case 's': cmd_state(); break;
     case 'r': cmd_reset(); break;
-    case 'j': enctest_encode(1); break;
+    case 'j':
+        if(pipeline_active())
+            enctest_dump_pipeline();
+        else
+            enctest_encode(1);
+        break;
     case 'J': enctest_encode(0); break;
     case 'q': enctest_cycle_quality(); break;
     case 'm': enctest_cycle_fmt(); break;
@@ -54,8 +60,8 @@ static void dispatch(char c) {
     case 'Z': sdtest_scrub(); break;
     case 'B': sdtest_benchmark(); break;
     case 'W': sdtest_toggle_width(); break;
-    case 'c': enctest_live_toggle(); break;
-    case 'f': enctest_live_tvdfmt(); break;
+    case 'c': pipeline_toggle(); break;
+    case 'f': pipeline_fmt_toggle(); break;
     case 'p': enctest_rawdump(); break;
     case 'x': enctest_copy_encode(); break;
     case 'X':

@@ -136,3 +136,38 @@ uint32_t jpegtab_prefix(uint8_t* dst, const uint16_t qY[64], const uint16_t qC[6
     p = put_dht(p, 0x11, dht_ac_chroma, sizeof(dht_ac_chroma));
     return (uint32_t)(p - dst);
 }
+
+uint32_t jpegtab_headers(uint8_t* dst, const uint16_t qY[64], const uint16_t qC[64],
+                         uint16_t w, uint16_t h, int samp_2x2) {
+    uint8_t* p = dst + jpegtab_prefix(dst, qY, qC);
+    /* SOF0: baseline, 8-bit, 3 components, Y sampling 2x2 or 2x1 */
+    p = put_marker(p, 0xC0, 2 + 1 + 2 + 2 + 1 + 3 * 3);
+    *p++ = 8;
+    *p++ = (uint8_t)(h >> 8);
+    *p++ = (uint8_t)h;
+    *p++ = (uint8_t)(w >> 8);
+    *p++ = (uint8_t)w;
+    *p++ = 3;
+    *p++ = 1;
+    *p++ = (uint8_t)(0x20 | (samp_2x2 ? 2 : 1));
+    *p++ = 0;
+    *p++ = 2;
+    *p++ = 0x11;
+    *p++ = 1;
+    *p++ = 3;
+    *p++ = 0x11;
+    *p++ = 1;
+    /* SOS */
+    p = put_marker(p, 0xDA, 2 + 1 + 2 * 3 + 3);
+    *p++ = 3;
+    *p++ = 1;
+    *p++ = 0x00;
+    *p++ = 2;
+    *p++ = 0x11;
+    *p++ = 3;
+    *p++ = 0x11;
+    *p++ = 0;  /* Ss */
+    *p++ = 63; /* Se */
+    *p++ = 0;  /* AhAl */
+    return (uint32_t)(p - dst);
+}

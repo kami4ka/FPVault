@@ -51,12 +51,14 @@
 #define BSRING_SLOTS      40u
 #define BSRING_SLOT_SIZE  0x40000u               /* 256 KB */
 #define BSRING_SIZE       (BSRING_SLOTS * BSRING_SLOT_SIZE)  /* 10 MB */
-/* In-slot offsets: one contiguous AVI chunk = header + JPEG prefix + VE
- * bitstream + EOI. The VE output MUST be 1 KB aligned: measured on silicon
- * (wipe-encode-scan), VE 1663 writes at VLE_ADDR aligned DOWN - programming
- * slot+640 landed the stream at slot+0. */
-#define BSRING_CHUNK_OFF  444u  /* 8-byte '00dc'+len */
-#define BSRING_PREFIX_OFF 452u  /* 572-byte SOI+DQT+DHT */
+/* In-slot offsets: one contiguous AVI chunk = header + full JPEG headers +
+ * VE entropy scan + EOI. The VE output MUST be 1 KB aligned: measured on
+ * silicon (wipe-encode-scan), VE 1663 writes at VLE_ADDR aligned DOWN -
+ * programming slot+640 landed the stream at slot+0. The 605-byte header
+ * block is SOI+DQT+DHT+SOF0+SOS (all CPU-side; see jpegtab.h for why the
+ * hardware cannot emit markers). */
+#define BSRING_CHUNK_OFF  411u  /* 8-byte '00dc'+len */
+#define BSRING_PREFIX_OFF 419u  /* 605-byte JPEG header block */
 #define BSRING_DATA_OFF   1024u /* VE VLE output base (1 KB aligned) */
 
 #define IDX_BASE          (BSRING_BASE + BSRING_SIZE)        /* 0x83200000 */

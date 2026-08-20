@@ -20,8 +20,10 @@
 #include "enctest.h"
 #include "capture.h"
 #include "recorder.h"
+#include "pipeline.h"
 #include "arm32.h"
 #include "f1c100s_gpio.h"
+#include "f1c100s_intc.h"
 #include "f1c100s_timer.h"
 
 #ifndef GIT_REV
@@ -31,6 +33,13 @@
 static uint32_t uptime_s = 0;
 
 uint32_t sys_uptime_s(void) { return uptime_s; }
+
+/* 1 kHz pipeline heartbeat: capture ring + VE encode live here, so a
+ * blocking SD write in the main loop can never cost a captured frame. */
+static void tick_irq(void) {
+    tim_clear_irq(TIM1);
+    pipeline_tick();
+}
 
 int main(void) {
     system_init();
@@ -51,32 +60,31 @@ int main(void) {
     /* M1: Cedar VE bring-up + test-pattern encoder ('j' on the console). */
     enctest_init();
 
+    /* TIM1 @ 1 kHz drives the capture/encode pipeline from IRQ context. */
+    tim_init(TIM1, TIM_MODE_CONT, TIM_SRC_HOSC, TIM_PSC_1);
+    tim_set_period(TIM1, 24000); /* 24 MHz / 24000 = 1 kHz */
+    intc_set_irq_handler(IRQ_TIMER1, tick_irq);
+    intc_enable_irq(IRQ_TIMER1);
+    tim_int_enable(TIM1);
+    tim_start(TIM1);
+
     {
         uint32_t t_sec = tim_get_cnt(TIM0);
-        uint32_t t_follow = t_sec;
         int led = 0;
 
         while(1) {
             wdg_feed();
             console_poll();
 
-            /* M3: capture ring + per-frame hardware encode. */
-            enctest_live_tick();
+            /* Drain encoded frames to the recorder (may block on SD -
+             * the IRQ pipeline keeps capturing regardless). */
+            pipeline_consume();
 
-            /* 20 ms cadence: input-standard auto-follow. Timer-paced, NOT
-             * frame-paced: with no signal there are no frames, and that is
-             * exactly when auto-follow has work to do. */
-            if(enctest_live_active() &&
-               (uint32_t)(t_follow - tim_get_cnt(TIM0)) >= TICKS_PER_SEC / 50u) {
-                t_follow -= TICKS_PER_SEC / 50u;
-                capture_follow_input();
-            }
-
-            /* 1 Hz housekeeping: LED heartbeat + uptime + live stats. */
+            /* 1 Hz housekeeping: LED heartbeat + uptime + stats. */
             if((uint32_t)(t_sec - tim_get_cnt(TIM0)) >= TICKS_PER_SEC) {
                 t_sec -= TICKS_PER_SEC;
                 uptime_s++;
-                enctest_live_stats();
+                pipeline_stats();
                 recorder_stats();
                 led ^= 1;
                 if(led)

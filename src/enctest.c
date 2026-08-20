@@ -131,115 +131,48 @@ static void b64_finish(b64_t* b) {
     printf("\r\n");
 }
 
-/* ---- M3: live capture -> continuous encode ------------------------------
- * Every completed TVD frame is hardware-encoded into slot 0 (bitstream
- * discarded - the muxer comes in M4). This measures the real pipeline:
- * encoded fps must equal input fps with zero drops on a stable signal.
- * 'j' in live mode dumps the newest encoded camera frame - the project's
- * eyes, since there is no display path. */
-static uint8_t live_on = 0;
-static uint8_t cap_started = 0;
-static uint32_t live_enc = 0, live_enc_fails = 0;
-static uint32_t live_us_sum = 0, live_last_len = 0;
+/* ---- pipeline hooks ------------------------------------------------------
+ * The live path lives in pipeline.c now (IRQ-driven). The bench keeps two
+ * jobs: dump the newest pipeline-encoded frame as a JPEG, and the
+ * copy-encode cross-check. */
+#include "pipeline.h"
 
-static void live_pair_formats(void) {
-    /* TVD 4:2:0 pairs with the silicon-proven ISP NV12; TVD 4:2:2 (the
-     * capture mode the predecessor proved) pairs with NV16, which on this
-     * VE generation is field value 2 (H3 reference: 1 at bit 29 == 2 in
-     * our bit-28-based encoding). Both start with 4:2:0 SOF - whether the
-     * ISP downsamples NV16 is exactly what the experiment shows. */
-    if(capture_fmt() == CAP_FMT_420) {
-        cfg.isp_fmt = 0;
-        cfg.samp_2x2 = 1;
-    } else {
-        cfg.isp_fmt = 2;
-        cfg.samp_2x2 = 1;
-    }
-}
-
-void enctest_live_toggle(void) {
-    if(!cap_started) {
-        capture_init();
-        cap_started = 1;
-    }
-    live_on ^= 1;
-    if(live_on) live_pair_formats();
-    printf("[live] %s (tvd %s, isp_fmt %u, SOF %s)\r\n", live_on ? "ON" : "off",
-           capture_fmt() == CAP_FMT_420 ? "420" : "422", cfg.isp_fmt,
-           cfg.samp_2x2 ? "2x2" : "2x1");
-}
-
-void enctest_live_tvdfmt(void) {
-    if(!cap_started) {
-        printf("[live] enable live first (c)\r\n");
+void enctest_dump_pipeline(void) {
+    uint16_t qY[64], qC[64];
+    static uint8_t prefix[JPEGTAB_HDR_LEN];
+    uint32_t phys, blen, plen;
+    pipeline_freeze(1);
+    if(!pipeline_last(&phys, &blen)) {
+        printf("[enc] pipeline has no encoded frame yet\r\n");
+        pipeline_freeze(0);
         return;
     }
-    capture_set_fmt(capture_fmt() == CAP_FMT_420 ? CAP_FMT_422 : CAP_FMT_420);
-    live_pair_formats();
-    printf("[live] tvd %s, isp_fmt %u\r\n",
-           capture_fmt() == CAP_FMT_420 ? "420" : "422", cfg.isp_fmt);
-}
-
-void enctest_live_tick(void) {
-    int prev;
-    uint32_t t0;
-    int32_t r;
-
-    if(!live_on) return;
-    if(!capture_poll()) return;
-    prev = capture_prev();
-    if(prev < 0) return;
-
-    cfg.w = CAP_FW;
-    cfg.h = capture_height();
-    t0 = tim_get_cnt(TIM0);
-    vejpeg_start(&cfg, (uint32_t)capture_y(prev), (uint32_t)capture_c(prev),
-                 OUT_PHYS, OUT_MAX);
-    r = vejpeg_wait(50000);
-    live_us_sum += (uint32_t)(t0 - tim_get_cnt(TIM0)) / 24u;
-    if(r < 0) {
-        live_enc_fails++;
-        return;
+    jpegtab_quant(pipeline_quality(), qY, qC);
+    plen = jpegtab_headers(prefix, qY, qC, CAP_FW, capture_height(), 1);
+    printf("-----BEGIN JPEG %lu-----\r\n", (unsigned long)(plen + blen + 2));
+    {
+        static const uint8_t eoi[2] = {0xFF, 0xD9};
+        b64_t b = {0, 0, 0};
+        b64_feed(&b, prefix, plen);
+        b64_feed(&b, (const uint8_t*)phys, blen);
+        b64_feed(&b, eoi, 2);
+        b64_finish(&b);
     }
-    live_last_len = (uint32_t)r;
-    live_enc++;
-    if(live_us_sum > 0xF0000000u) live_us_sum = 0; /* crude wrap guard */
-
-    recorder_on_frame(BSRING_BASE, (uint32_t)r, cfg.quality);
-}
-
-void enctest_live_stats(void) {
-    static uint32_t last_in = 0, last_enc = 0;
-    uint32_t in = capture_frames();
-    if(!live_on) return;
-    printf("[live] in %lu fps, enc %lu fps, fails %lu, %lu us/f, len %lu, "
-           "state %08lx %s\r\n",
-           (unsigned long)(in - last_in), (unsigned long)(live_enc - last_enc),
-           (unsigned long)live_enc_fails,
-           (unsigned long)(live_enc ? live_us_sum / live_enc : 0),
-           (unsigned long)live_last_len, (unsigned long)capture_state(),
-           capture_signal_ok() ? "LOCK" : "no-signal");
-    last_in = in;
-    last_enc = live_enc;
-}
-
-int enctest_live_active(void) {
-    return live_on;
+    printf("-----END JPEG-----\r\n");
+    pipeline_freeze(0);
 }
 
 /* Copy the newest capture frame into the TESTPAT buffers and encode it
- * through the exact code path that produces clean color bars. If this
- * yields a clean camera image, the encoder is fine and the fault is
- * specific to reading the capture ring's addresses. */
+ * through the bench path - separates "encoder broken" from "capture-read
+ * broken" (it was decisive once already). */
 void enctest_copy_encode(void) {
-    int p = cap_started ? capture_prev() : -1;
+    int p = capture_prev();
     const uint8_t* sy;
     const uint8_t* sc;
     uint8_t* dy = (uint8_t*)PAT_Y;
     uint8_t* dc = (uint8_t*)PAT_C;
     uint32_t i, ylen, clen;
     uint16_t h;
-    uint8_t live_was = live_on;
 
     if(p < 0) {
         printf("[copy] no completed capture frame\r\n");
@@ -257,12 +190,10 @@ void enctest_copy_encode(void) {
     cache_clean_range(PAT_Y, PAT_Y + ylen);
     cache_clean_range(PAT_C, PAT_C + clen);
 
-    live_on = 0; /* force the testpat source in enctest_encode */
     cfg.w = CAP_FW;
     cfg.h = h;
     cfg.isp_fmt = (capture_fmt() == CAP_FMT_420) ? 0 : 2;
     enctest_encode(1);
-    live_on = live_was;
 }
 
 /* Raw-plane truth: dump the newest completed capture buffer decimated 8x
@@ -271,7 +202,7 @@ void enctest_copy_encode(void) {
  * Uses the same streaming base64 as the JPEG dump. */
 void enctest_rawdump(void) {
     extern void putchar_(char c);
-    int p = cap_started ? capture_prev() : -1;
+    int p = capture_prev();
     const uint8_t* y;
     const uint8_t* c;
     uint16_t h, row, col;
@@ -377,21 +308,11 @@ void enctest_toggle_samp(void) {
 
 void enctest_encode(int dump) {
     uint16_t qY[64], qC[64];
-    static uint8_t prefix[JPEGTAB_PREFIX_MAX];
+    static uint8_t prefix[JPEGTAB_HDR_LEN];
     uint32_t plen, t0, us;
     uint32_t src_y = PAT_Y, src_c = PAT_C;
     int32_t blen;
 
-    /* In live mode 'j' shows what the camera sees. (When called from
-     * enctest_copy_encode, live_on is forced off and cfg.w/h are already
-     * set - don't override them with the pattern geometry.) */
-    if(live_on && capture_prev() >= 0) {
-        int p = capture_prev();
-        src_y = (uint32_t)capture_y(p);
-        src_c = (uint32_t)capture_c(p);
-        cfg.w = CAP_FW;
-        cfg.h = capture_height();
-    }
 
     t0 = tim_get_cnt(TIM0);
     vejpeg_start(&cfg, src_y, src_c, OUT_PHYS, OUT_MAX);
@@ -411,7 +332,7 @@ void enctest_encode(int dump) {
     if(!dump) return;
 
     jpegtab_quant(cfg.quality, qY, qC);
-    plen = jpegtab_prefix(prefix, qY, qC);
+    plen = jpegtab_headers(prefix, qY, qC, cfg.w, cfg.h, cfg.samp_2x2);
 
     printf("-----BEGIN JPEG %lu-----\r\n", (unsigned long)(plen + blen + 2));
     {

@@ -27,4 +27,13 @@ void jpegtab_quant(int quality, uint16_t qY[64], uint16_t qC[64]);
  * entropy data) follows this, and EOI closes the file. */
 uint32_t jpegtab_prefix(uint8_t* dst, const uint16_t qY[64], const uint16_t qC[64]);
 
+/* Emit the COMPLETE header set: prefix + SOF0 + SOS (605 bytes). On VE
+ * 1663 the basic-bits port routes pushed bytes through the JPEG byte
+ * stuffer (FF C0 arrives in the stream as FF 00 C0 - a corrupted marker),
+ * so in-band header pushing is impossible and every header is CPU-side.
+ * The hardware stream is then the pure entropy scan. */
+uint32_t jpegtab_headers(uint8_t* dst, const uint16_t qY[64], const uint16_t qC[64],
+                         uint16_t w, uint16_t h, int samp_2x2);
+
 #define JPEGTAB_PREFIX_MAX 576
+#define JPEGTAB_HDR_LEN 605u /* prefix 572 + SOF0 19 + SOS 14 */
