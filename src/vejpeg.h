@@ -27,7 +27,12 @@ typedef struct vejpeg_cfg {
     uint8_t isp_fmt;   /* VE_ISP_CTRL[31:28]: 0=NV12; 1 or 2 = NV16 (experiment) */
     uint8_t samp_2x2;  /* SOF0 luma sampling: 1 = 2x2 (4:2:0), 0 = 2x1 (4:2:2) */
     uint8_t quality;   /* 1..100, must match the prefix the file gets */
+    uint8_t no_hdr;    /* skip the SOF0/SOS put_bits push (bring-up experiment) */
 } vejpeg_cfg_t;
+
+/* VLE_LENGTH and VLE_OFFSET sampled right after the header push (0 if the
+ * push was skipped) - tells whether the basic-bits port accepted anything. */
+extern uint32_t vejpeg_dbg_hdr_len, vejpeg_dbg_hdr_off;
 
 /* Program the whole encode and trigger it. Non-blocking. phy_out gets the
  * SOF0+SOS+scan bitstream; out_size bounds it in hardware (VLE_END). */

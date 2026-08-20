@@ -42,6 +42,19 @@ static void dispatch(char c) {
     case 'J': enctest_encode(0); break;
     case 'q': enctest_cycle_quality(); break;
     case 'm': enctest_cycle_fmt(); break;
+    case 'y': enctest_toggle_samp(); break;
+    case 'u': enctest_toggle_uniform(); break;
+    case 'b': enctest_toggle_hdr(); break;
+    case 'w': enctest_wipe_slot(); break;
+    case 'd': enctest_scan_slot(); break;
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7': enctest_set_fmt((uint8_t)(c - '0')); break;
     case 'v': enctest_info(); break;
     default:
         printf("? s state, r reset | VE: j enc+dump, J enc, q quality, m fmt, v info\r\n");

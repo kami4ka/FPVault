@@ -27,16 +27,82 @@
 #define OUT_MAX (BSRING_SLOT_SIZE - BSRING_DATA_OFF)
 
 static vejpeg_cfg_t cfg = {
-    .w = PAT_W, .h = PAT_H, .isp_fmt = 0 /* NV12 */, .samp_2x2 = 1, .quality = 75};
+    .w = PAT_W, .h = PAT_H, .isp_fmt = 0 /* NV12 */, .samp_2x2 = 1, .quality = 75,
+    .no_hdr = 0};
+static uint8_t pat_uniform = 0;
 
 static void pattern_fill(void) {
-    if(cfg.isp_fmt == 0)
+    if(pat_uniform) {
+        /* Solid frame: Y=128, U=90, V=200 - invariant under any geometry
+         * scrambling, so it separates input-mapping bugs from scan-layout
+         * bugs: a wrong-geometry read of a uniform image still encodes the
+         * right solid color. */
+        uint8_t* y = (uint8_t*)PAT_Y;
+        uint8_t* c = (uint8_t*)PAT_C;
+        uint32_t i;
+        for(i = 0; i < (uint32_t)PAT_W * PAT_H; i++)
+            y[i] = 128;
+        for(i = 0; i < (uint32_t)PAT_W * PAT_H; i += 2) {
+            c[i] = 90;
+            c[i + 1] = 200;
+        }
+    } else if(cfg.isp_fmt == 0) {
         testpat_bars_nv12((uint8_t*)PAT_Y, (uint8_t*)PAT_C, PAT_W, PAT_H);
-    else
+    } else {
         testpat_bars_nv16((uint8_t*)PAT_Y, (uint8_t*)PAT_C, PAT_W, PAT_H);
+    }
     /* TESTPAT region is cacheable and the VE reads through DRAM. */
     cache_clean_range(PAT_Y, PAT_Y + (uint32_t)PAT_W * PAT_H);
     cache_clean_range(PAT_C, PAT_C + (uint32_t)PAT_W * PAT_H);
+}
+
+void enctest_toggle_uniform(void) {
+    pat_uniform ^= 1;
+    pattern_fill();
+    printf("[enc] pattern: %s\r\n", pat_uniform ? "uniform Y128 U90 V200" : "bars");
+}
+
+void enctest_toggle_hdr(void) {
+    cfg.no_hdr ^= 1;
+    printf("[enc] header push: %s\r\n", cfg.no_hdr ? "OFF" : "on");
+}
+
+/* Where does the hardware REALLY write? Wipe the whole slot with a
+ * sentinel, encode once, scan for the touched extent. DRAM persists across
+ * watchdog resets, so without the wipe the buffer shows stale streams from
+ * previous runs - which is exactly what confused first light. */
+void enctest_wipe_slot(void) {
+    uint8_t* p = (uint8_t*)BSRING_BASE;
+    uint32_t i;
+    for(i = 0; i < BSRING_SLOT_SIZE; i++)
+        p[i] = 0xEE;
+    printf("[enc] slot 0 wiped with 0xEE\r\n");
+}
+
+void enctest_scan_slot(void) {
+    const uint8_t* p = (const uint8_t*)BSRING_BASE;
+    uint32_t first = 0xFFFFFFFFu, last = 0, i, n = 0;
+    for(i = 0; i < BSRING_SLOT_SIZE; i++) {
+        if(p[i] != 0xEE) {
+            if(first == 0xFFFFFFFFu) first = i;
+            last = i;
+            n++;
+        }
+    }
+    if(first == 0xFFFFFFFFu) {
+        printf("[enc] slot untouched\r\n");
+        return;
+    }
+    printf("[enc] written: first=+%lu last=+%lu count=%lu (VLE base is +%lu)\r\n",
+           (unsigned long)first, (unsigned long)last, (unsigned long)n,
+           (unsigned long)BSRING_DATA_OFF);
+    for(i = first & ~15u; i < first + 64 && i <= last; i += 16) {
+        uint32_t j;
+        printf("  +%06lx:", (unsigned long)i);
+        for(j = 0; j < 16; j++)
+            printf(" %02x", p[i + j]);
+        printf("\r\n");
+    }
 }
 
 void enctest_init(void) {
@@ -68,6 +134,24 @@ void enctest_cycle_fmt(void) {
     pattern_fill();
     printf("[enc] isp_fmt %u (%s), SOF0 %s\r\n", cfg.isp_fmt,
            cfg.isp_fmt == 0 ? "NV12" : "NV16?", cfg.samp_2x2 ? "2x2" : "2x1");
+}
+
+/* Raw sweep hooks: VE 1663 does not match jepoc's ISP format encoding
+ * (first light produced tile-scrambled geometry), so the field is swept
+ * from the host instead of assumed. The pattern is refilled per format:
+ * values that mean 4:2:0 read h/2 chroma rows, 4:2:2 read h. Both layouts
+ * are filled (NV16 fill covers the NV12 rows with the same content). */
+void enctest_set_fmt(uint8_t v) {
+    cfg.isp_fmt = (uint8_t)(v & 0xf);
+    testpat_bars_nv16((uint8_t*)PAT_Y, (uint8_t*)PAT_C, PAT_W, PAT_H);
+    cache_clean_range(PAT_Y, PAT_Y + (uint32_t)PAT_W * PAT_H);
+    cache_clean_range(PAT_C, PAT_C + (uint32_t)PAT_W * PAT_H);
+    printf("[enc] isp_fmt=%u (raw)\r\n", cfg.isp_fmt);
+}
+
+void enctest_toggle_samp(void) {
+    cfg.samp_2x2 ^= 1;
+    printf("[enc] SOF0 %s\r\n", cfg.samp_2x2 ? "2x2" : "2x1");
 }
 
 /* Streaming base64: the JPEG is emitted as prefix + hardware bitstream +
@@ -137,8 +221,9 @@ void enctest_encode(int dump) {
                (unsigned long)us, (unsigned long)vejpeg_status());
         return;
     }
-    printf("[enc] ok: %ld bytes in %luus (q=%u fmt=%u)\r\n", (long)blen,
-           (unsigned long)us, cfg.quality, cfg.isp_fmt);
+    printf("[enc] ok: %ld bytes in %luus (q=%u fmt=%u hdrbits=%lu/%lu)\r\n",
+           (long)blen, (unsigned long)us, cfg.quality, cfg.isp_fmt,
+           (unsigned long)vejpeg_dbg_hdr_len, (unsigned long)vejpeg_dbg_hdr_off);
 
     if(!dump) return;
 

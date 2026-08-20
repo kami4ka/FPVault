@@ -10,6 +10,8 @@
 #include "jpegtab.h"
 #include "f1c100s_timer.h"
 
+uint32_t vejpeg_dbg_hdr_len, vejpeg_dbg_hdr_off;
+
 /* Push raw bits into the VLE bitstream through the basic-bits port. */
 static void put_bits(uint8_t nbits, uint32_t data) {
     ve_w(VE_AVC_BASIC_BITS, data);
@@ -94,8 +96,12 @@ void vejpeg_start(const vejpeg_cfg_t* cfg, uint32_t phy_y, uint32_t phy_c,
     ve_w(VE_AVC_STATUS, st | 0xf);
 
     /* headers into the bitstream */
-    put_sof0(cfg->w, cfg->h, cfg->samp_2x2);
-    put_sos();
+    if(!cfg->no_hdr) {
+        put_sof0(cfg->w, cfg->h, cfg->samp_2x2);
+        put_sos();
+    }
+    vejpeg_dbg_hdr_len = ve_r(VE_AVC_VLE_LENGTH);
+    vejpeg_dbg_hdr_off = ve_r(VE_AVC_VLE_OFFSET);
 
     /* quantizer: bias from the DC steps, tables pre-reciprocated, natural
      * order, Y then C (must be the same tables the file prefix carries) */
