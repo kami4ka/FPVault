@@ -27,6 +27,11 @@ int sdtest_is_mounted(void) {
     return mounted;
 }
 
+void sdtest_unmount(void) {
+    f_mount(0, "", 0);
+    mounted = 0;
+}
+
 void sdtest_toggle_width(void) {
     uint32_t w = disk_toggle_width();
     mounted = 0;

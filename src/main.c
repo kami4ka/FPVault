@@ -21,6 +21,7 @@
 #include "capture.h"
 #include "recorder.h"
 #include "pipeline.h"
+#include "fclink.h"
 #include "arm32.h"
 #include "f1c100s_gpio.h"
 #include "f1c100s_intc.h"
@@ -68,29 +69,45 @@ int main(void) {
     tim_int_enable(TIM1);
     tim_start(TIM1);
 
+    /* DVR product behavior: capture+encode from boot, recorder state
+     * machine arms itself (mount retry -> wait for signal -> record),
+     * flight-controller link listening. The console can override all of
+     * it (:R manual toggle, :A auto on/off). */
+    pipeline_toggle();
+    fclink_init();
+
     {
         uint32_t t_sec = tim_get_cnt(TIM0);
         int led = 0;
 
+        uint32_t t_led = t_sec;
         while(1) {
             wdg_feed();
             console_poll();
+            fclink_poll();
+            recorder_task();
 
             /* Drain encoded frames to the recorder (may block on SD -
              * the IRQ pipeline keeps capturing regardless). */
             pipeline_consume();
 
-            /* 1 Hz housekeeping: LED heartbeat + uptime + stats. */
+            /* LED: 8-bit state pattern, one bit per 125 ms. */
+            if((uint32_t)(t_led - tim_get_cnt(TIM0)) >= TICKS_PER_SEC / 8u) {
+                t_led -= TICKS_PER_SEC / 8u;
+                led = (led + 1) & 7;
+                if((recorder_led_pattern() >> (7 - led)) & 1)
+                    gpio_pin_set(LED_PORT, LED_PIN);
+                else
+                    gpio_pin_clear(LED_PORT, LED_PIN);
+            }
+
+            /* 1 Hz housekeeping. */
             if((uint32_t)(t_sec - tim_get_cnt(TIM0)) >= TICKS_PER_SEC) {
                 t_sec -= TICKS_PER_SEC;
                 uptime_s++;
                 pipeline_stats();
                 recorder_stats();
-                led ^= 1;
-                if(led)
-                    gpio_pin_set(LED_PORT, LED_PIN);
-                else
-                    gpio_pin_clear(LED_PORT, LED_PIN);
+                fclink_stats();
             }
         }
     }

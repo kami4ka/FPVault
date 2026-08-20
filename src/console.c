@@ -69,6 +69,7 @@ static void dispatch(char c) {
         printf("[cap] TVD DMA disabled\r\n");
         break;
     case 'R': recorder_toggle(); break;
+    case 'A': recorder_toggle_auto(); break;
     case '8':
         capture_force_colormode(0);
         printf("[cap] forced NTSC color\r\n");

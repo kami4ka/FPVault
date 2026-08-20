@@ -11,8 +11,11 @@
 #include "dcf.h"
 #include "jpegtab.h"
 #include "capture.h"
+#include "pipeline.h"
 #include "f1c100s_timer.h"
 #include "ff.h"
+
+extern void sdtest_unmount(void);
 
 /* ---- FatFs glue for the muxer ------------------------------------------- */
 static FIL clip;
@@ -59,76 +62,84 @@ static const dcf_ops_t fs_ops = {0, fs_list_dir, fs_make_dir};
 
 /* 200 MB covers a 5-minute segment with margin at D1 quality-75 rates. */
 #define REC_PREALLOC (200u * 1024u * 1024u)
+/* Segment length in frames: ~5 min NTSC. Bounds worst-case loss and keeps
+ * single files small enough to handle; a new segment opens seamlessly (the
+ * bitstream ring absorbs the close/open gap). */
+#define REC_SEG_FRAMES 9000u
 
 /* ---- state --------------------------------------------------------------- */
+typedef enum {
+    REC_NO_CARD = 0,  /* no mounted card - retry mount periodically */
+    REC_WAIT_SIGNAL,  /* armed: start once the video signal is stable */
+    REC_RECORDING,
+    REC_MANUAL_STOP,  /* user said stop - no auto restart until told */
+    REC_ERROR,        /* fell over; retries the card after a pause */
+} rec_state_e;
+
 static avi_t avi;
 static dcf_t dcf;
-static uint8_t recording = 0, dcf_ready = 0;
+static rec_state_e state = REC_NO_CARD;
+static uint8_t auto_record = 1;
+static uint8_t clip_open = 0, dcf_ready = 0;
 static int staged_quality = -1;
 static uint32_t frames_written = 0, drops = 0, wr_us_max = 0;
 static uint32_t last_refresh_frame = 0;
+static uint32_t seg_count = 0;
 static char clip_path[DCF_PATH_MAX];
+static uint32_t t_state, t_mount_try, t_last_frame, t_signal_edge;
 
-extern int sdtest_is_mounted(void); /* sdtest owns the mount */
+extern int sdtest_is_mounted(void);
+extern void sdtest_mount(void);
 
-int recorder_active(void) {
-    return recording;
+static uint32_t now(void) {
+    return tim_get_cnt(TIM0); /* down-counter */
+}
+static uint32_t since_us(uint32_t t) {
+    return (uint32_t)(t - tim_get_cnt(TIM0)) / 24u;
+}
+static uint32_t frame_period_ticks(void) {
+    /* NTSC 30000/1001 fps -> 800800 ticks; PAL 25 -> 960000 */
+    return (capture_standard() == VID_PAL) ? 960000u : 800800u;
 }
 
-void recorder_toggle(void) {
-    if(recording) {
-        avi_finalize(&avi);
-        f_truncate(&clip); /* drop the unused preallocated tail */
-        f_close(&clip);
-        recording = 0;
-        printf("[rec] STOP %s: %lu frames, %lu drops\r\n", clip_path,
-               (unsigned long)frames_written, (unsigned long)drops);
-        return;
-    }
-    if(!sdtest_is_mounted()) {
-        printf("[rec] mount the card first (:M)\r\n");
-        return;
-    }
+int recorder_active(void) {
+    return state == REC_RECORDING;
+}
+
+static void clip_stop(void) {
+    if(!clip_open) return;
+    avi_finalize(&avi);
+    f_truncate(&clip);
+    f_close(&clip);
+    clip_open = 0;
+    printf("[rec] closed %s: %lu frames, %lu drops\r\n", clip_path,
+           (unsigned long)frames_written, (unsigned long)drops);
+}
+
+static int clip_start(void) {
     if(!dcf_ready) {
-        int r = dcf_boot_scan(&dcf, &fs_ops);
-        if(r != DCF_OK) {
-            printf("[rec] dcf scan failed (%d)\r\n", r);
-            return;
-        }
+        if(dcf_boot_scan(&dcf, &fs_ops) != DCF_OK) return -1;
         dcf_ready = 1;
     }
-    if(dcf_next_clip(&dcf, clip_path) != DCF_OK) {
-        printf("[rec] no clip slot (card full?)\r\n");
-        return;
-    }
-    if(f_open(&clip, clip_path, FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) {
-        printf("[rec] open %s failed\r\n", clip_path);
-        return;
-    }
-    /* Preallocate the whole segment contiguously and sync ONCE, up front:
-     * the directory entry then already carries the full size, so no
-     * periodic f_sync is needed during recording (f_sync under the IRQ
-     * pipeline hard-crashed the board - unexplained, on the debt list -
-     * and this design is crash-safer anyway: the FAT chain is written
-     * once, before the first frame). The header-refresh seek-away already
-     * forces FatFs to flush the header sector each second. */
+    if(dcf_next_clip(&dcf, clip_path) != DCF_OK) return -1;
+    if(f_open(&clip, clip_path, FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) return -1;
+    /* Preallocate + sync ONCE: the directory entry is final before the
+     * first frame, so no periodic f_sync is needed while recording
+     * (f_sync under the IRQ pipeline hard-crashes - debt list - and this
+     * is crash-safer anyway). Header refresh flushes via its seek-away. */
     if(f_expand(&clip, REC_PREALLOC, 1) != FR_OK)
         printf("[rec] prealloc failed - recording without it\r\n");
     if(f_sync(&clip) != FR_OK) {
-        printf("[rec] initial sync failed\r\n");
         f_close(&clip);
-        return;
+        return -1;
     }
     {
-        /* NTSC 30000/1001, PAL 25/1. The rate should track what capture
-         * actually delivers; nominal standard rate is the v0 answer. */
         uint32_t rate = (capture_standard() == VID_PAL) ? 25 : 30000;
         uint32_t scale = (capture_standard() == VID_PAL) ? 1 : 1001;
         if(avi_start(&avi, &clip_io, CAP_FW, capture_height(), rate, scale,
                      (uint8_t*)IDX_BASE, IDX_SIZE / 16u) != 0) {
-            printf("[rec] avi_start failed\r\n");
             f_close(&clip);
-            return;
+            return -1;
         }
     }
     staged_quality = -1;
@@ -136,27 +147,146 @@ void recorder_toggle(void) {
     drops = 0;
     wr_us_max = 0;
     last_refresh_frame = 0;
-    recording = 1;
+    t_last_frame = now();
+    clip_open = 1;
     printf("[rec] RECORDING -> %s\r\n", clip_path);
+    return 0;
+}
+
+static void enter(rec_state_e s) {
+    state = s;
+    t_state = now();
+}
+
+void recorder_toggle(void) {
+    if(state == REC_RECORDING) {
+        clip_stop();
+        enter(REC_MANUAL_STOP);
+        printf("[rec] manual stop (auto-record paused; :R to re-arm)\r\n");
+    } else {
+        /* manual start / re-arm */
+        if(!sdtest_is_mounted()) {
+            printf("[rec] no card mounted yet\r\n");
+            enter(REC_NO_CARD);
+            return;
+        }
+        if(clip_start() == 0)
+            enter(REC_RECORDING);
+        else
+            enter(REC_ERROR);
+    }
+}
+
+void recorder_toggle_auto(void) {
+    auto_record ^= 1;
+    printf("[rec] auto-record %s\r\n", auto_record ? "ON" : "off");
+}
+
+/* The state machine; call every main-loop pass (cheap). */
+void recorder_task(void) {
+    switch(state) {
+    case REC_NO_CARD:
+        if(sdtest_is_mounted()) {
+            enter(REC_WAIT_SIGNAL);
+            break;
+        }
+        if(since_us(t_mount_try) > 2000000u) {
+            t_mount_try = now();
+            sdtest_mount(); /* prints its own result */
+            if(sdtest_is_mounted()) enter(REC_WAIT_SIGNAL);
+        }
+        break;
+
+    case REC_WAIT_SIGNAL:
+        if(!auto_record) break;
+        if(!pipeline_active() || !capture_signal_ok()) {
+            t_signal_edge = now();
+            break;
+        }
+        /* one second of stable signal = start */
+        if(since_us(t_signal_edge) > 1000000u) {
+            if(clip_start() == 0)
+                enter(REC_RECORDING);
+            else
+                enter(REC_ERROR);
+        }
+        break;
+
+    case REC_RECORDING:
+        if(avi.error) {
+            /* Write path died (card yanked, card full): close what we can
+             * and go retry the card from scratch. */
+            clip_stop();
+            sdtest_unmount();
+            enter(REC_NO_CARD);
+            break;
+        }
+        if(!capture_signal_ok()) {
+            /* Keep wall-clock true across dropouts with empty frames; a
+             * sustained loss closes the clip. */
+            while((uint32_t)(t_last_frame - tim_get_cnt(TIM0)) >
+                  frame_period_ticks()) {
+                avi_add_empty_frame(&avi);
+                frames_written++;
+                t_last_frame -= frame_period_ticks();
+            }
+            if(since_us(t_signal_edge) > 5000000u) {
+                clip_stop();
+                enter(REC_WAIT_SIGNAL);
+            }
+        } else {
+            t_signal_edge = now();
+        }
+        break;
+
+    case REC_MANUAL_STOP:
+        break;
+
+    case REC_ERROR:
+        if(since_us(t_state) > 5000000u) {
+            sdtest_unmount();
+            enter(REC_NO_CARD);
+        }
+        break;
+    }
+}
+
+/* LED pattern byte per state, one bit per 125 ms, MSB first. */
+uint8_t recorder_led_pattern(void) {
+    switch(state) {
+    case REC_RECORDING: return 0xFF;   /* solid */
+    case REC_WAIT_SIGNAL: return 0xF0; /* slow blink */
+    case REC_MANUAL_STOP: return 0xC0;
+    case REC_NO_CARD: return 0xA0; /* double blink */
+    case REC_ERROR: return 0xAA;   /* fast blink */
+    }
+    return 0;
 }
 
 void recorder_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) {
     uint8_t* slot = (uint8_t*)slot_base;
-    uint32_t jpeg_len, total, t0, us;
+    uint32_t jpeg_len, t0, us;
     uint32_t pad, i;
 
-    if(!recording) return;
+    if(state != REC_RECORDING || !clip_open) return;
 
-    /* NB: hdr buffer is JPEGTAB_HDR_LEN and capture.h provides the height.
-     * Stage the full JPEG header block (SOI..SOS) into the slot. Tables
-     * change with quality, geometry with the standard - recompute on
-     * change, copy always (605 bytes, ~us; every slot in the rotating
-     * ring needs its own copy). */
+    /* Segment rollover: close and open seamlessly; the bitstream ring
+     * absorbs the gap. Every segment gets a fresh DCF index. */
+    if(frames_written >= REC_SEG_FRAMES) {
+        seg_count++;
+        clip_stop();
+        if(clip_start() != 0) {
+            enter(REC_ERROR);
+            return;
+        }
+    }
+
+    /* Stage the full JPEG header block (SOI..SOS). Recompute on quality or
+     * geometry change, copy always (608 B; each rotating slot needs it). */
     {
         static uint8_t hdr[JPEGTAB_HDR_LEN];
         static uint16_t staged_h = 0;
         uint16_t h = capture_height();
-        uint32_t i;
         if(quality != staged_quality || h != staged_h) {
             uint16_t qY[64], qC[64];
             jpegtab_quant(quality, qY, qC);
@@ -168,8 +298,6 @@ void recorder_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) 
             slot[BSRING_PREFIX_OFF + i] = hdr[i];
     }
 
-    /* EOI + zero pad after the hardware bitstream, chunk header up front:
-     * one contiguous '00dc' chunk, one f_write. */
     jpeg_len = JPEGTAB_HDR_LEN + bitstream_len + 2u;
     slot[BSRING_DATA_OFF + bitstream_len] = 0xFF;
     slot[BSRING_DATA_OFF + bitstream_len + 1] = 0xD9;
@@ -177,20 +305,17 @@ void recorder_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) 
     for(i = 0; i < pad; i++)
         slot[BSRING_DATA_OFF + bitstream_len + 2u + i] = 0;
     avi_fill_chunk_header(slot + BSRING_CHUNK_OFF, jpeg_len);
-    total = avi_chunk_total(jpeg_len);
 
-    t0 = tim_get_cnt(TIM0);
+    t0 = now();
     if(avi_add_raw(&avi, slot + BSRING_CHUNK_OFF, jpeg_len) != 0) {
         drops++;
         return;
     }
-    us = (uint32_t)(t0 - tim_get_cnt(TIM0)) / 24u;
+    us = since_us(t0);
     if(us > wr_us_max) wr_us_max = us;
-    (void)total;
     frames_written++;
+    t_last_frame = now();
 
-    /* Crash safety: refresh the header about once a second (the seek
-     * back and forth flushes the header sector through FatFs). */
     if(frames_written - last_refresh_frame >= 30u) {
         last_refresh_frame = frames_written;
         avi_refresh_header(&avi);
@@ -198,8 +323,12 @@ void recorder_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) 
 }
 
 void recorder_stats(void) {
-    if(!recording) return;
-    printf("[rec] %s: %lu frames, %lu drops, wr max %lu us\r\n", clip_path,
-           (unsigned long)frames_written, (unsigned long)drops,
-           (unsigned long)wr_us_max);
+    static const char* names[] = {"NO_CARD", "WAIT_SIGNAL", "RECORDING",
+                                  "MANUAL_STOP", "ERROR"};
+    if(state == REC_RECORDING)
+        printf("[rec] %s: %lu frames, %lu drops, wr max %lu us, seg %lu\r\n",
+               clip_path, (unsigned long)frames_written, (unsigned long)drops,
+               (unsigned long)wr_us_max, (unsigned long)seg_count);
+    else if(state != REC_MANUAL_STOP)
+        printf("[rec] %s%s\r\n", names[state], auto_record ? " (auto)" : "");
 }

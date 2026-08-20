@@ -14,9 +14,15 @@
 
 int recorder_active(void);
 
-/* Toggle recording. Start: mount if needed, boot-scan DCF state once,
- * open the next clip, write the AVI header. Stop: finalize + close. */
+/* Manual toggle: stop pauses auto-record until toggled again. */
 void recorder_toggle(void);
+
+/* The state machine (NO_CARD -> WAIT_SIGNAL -> RECORDING with 5-minute
+ * segments; dropouts stay in-clip as empty frames for <5 s, close it
+ * beyond; card errors retry the mount). Call every main-loop pass. */
+void recorder_task(void);
+void recorder_toggle_auto(void);      /* default ON: record on stable signal */
+uint8_t recorder_led_pattern(void);   /* 8 bits, 125 ms each, MSB first */
 
 /* Called by the live loop after each successful encode: the complete AVI
  * chunk is assembled in the slot (prefix already staged, header + EOI
