@@ -33,7 +33,11 @@ static uint8_t* const CAPC[NBUF] = {
 };
 
 static vid_std_e vid_std = VID_NTSC;
-static cap_fmt_e fmt = CAP_FMT_422;
+/* 4:2:0 is the DEFAULT: TVD 420_PL feeding the ISP as NV12 renders color
+ * faithfully. The 4:2:2 path (ISP format 2) came out with chroma both
+ * halved and geometrically smeared - the "blue Coca-Cola can" incident:
+ * the can was red. Keep 422 only as an experiment behind the :f toggle. */
+static cap_fmt_e fmt = CAP_FMT_420;
 static uint16_t FH = 480u;
 
 static int wr = 0;    /* buffer the TVD DMA is filling */
