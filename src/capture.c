@@ -35,7 +35,10 @@ static cap_fmt_e fmt = CAP_FMT_422;
 static uint16_t FH = 480u;
 
 static int wr = 0;    /* buffer the TVD DMA is filling */
-static int prev = -1; /* completed one cycle ago - the only safe read */
+static int done = -1; /* just completed - the TVD may still touch it if the
+                       * addr latch race was lost; NOT safe to read */
+static int safe = -1; /* completed one full cycle ago - the TVD has provably
+                       * moved on; the only buffer consumers may read */
 
 static uint32_t frames = 0, std_switches = 0;
 
@@ -82,7 +85,8 @@ void capture_set_standard(vid_std_e s) {
     /* Ring reset: FH just changed, every stamped row is at the old height
      * and would never read as erased. */
     wr = 0;
-    prev = -1;
+    done = -1;
+    safe = -1;
 
     tvd_set_mode(s == VID_PAL ? TVD_MODE_PAL_B : TVD_MODE_NTSC);
     tvd_set_out_fmt(fmt == CAP_FMT_420 ? TVD_FMT_420_PL : TVD_FMT_422_PL);
@@ -110,22 +114,34 @@ void capture_init(void) {
     capture_set_standard(VID_NTSC);
 }
 
+void capture_stop(void) {
+    tvd_disable();
+    done = -1;
+    safe = -1;
+}
+
 /* ---- frame completion ---------------------------------------------------- */
 int capture_poll(void) {
     if(!row_erased(wr, SENT_DONE_ROW)) return 0;
-    /* Arm on completion; the consumer keeps getting `prev`, the buffer the
-     * TVD has demonstrably moved on from. Losing the latch race (about one
-     * frame in nine at passthru's poll rate) repeats a frame, never tears. */
-    prev = wr;
+    /* Arm on completion; consumers get the buffer completed one full cycle
+     * EARLIER, never the one that just finished. Losing the latch race
+     * (about one frame in nine at passthru's poll rate) means the TVD keeps
+     * writing the just-done buffer until the next field boundary - reading
+     * it then shows a truncated frame with a stale tail. The extra cycle of
+     * delay is what makes a lost race cost a repeated frame, never a torn
+     * one. (This firmware initially consumed `done` and every capture had a
+     * grey bottom third - measured, not theoretical.) */
+    safe = done;
+    done = wr;
     wr = (wr + 1) % NBUF;
     tvd_set_out_buf(CAPY[wr], CAPC[wr]);
     sentinel_stamp(wr);
     frames++;
-    return 1;
+    return safe >= 0;
 }
 
 int capture_prev(void) {
-    return prev;
+    return safe;
 }
 const uint8_t* capture_y(int b) {
     return CAPY[b];

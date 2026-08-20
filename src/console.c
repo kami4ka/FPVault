@@ -17,6 +17,7 @@
 #include "f1c100s_timer.h"
 #include "enctest.h"
 #include "sdtest.h"
+#include "capture.h"
 
 extern uint32_t sys_uptime_s(void);
 
@@ -52,6 +53,14 @@ static void dispatch(char c) {
     case 'Z': sdtest_scrub(); break;
     case 'B': sdtest_benchmark(); break;
     case 'W': sdtest_toggle_width(); break;
+    case 'c': enctest_live_toggle(); break;
+    case 'f': enctest_live_tvdfmt(); break;
+    case 'p': enctest_rawdump(); break;
+    case 'x': enctest_copy_encode(); break;
+    case 'X':
+        capture_stop();
+        printf("[cap] TVD DMA disabled\r\n");
+        break;
     case '0':
     case '1':
     case '2':
@@ -67,7 +76,22 @@ static void dispatch(char c) {
     }
 }
 
+/* Commands are two bytes: ':' then the command character. The in-line
+ * ESP32 USB-serial bridge reboots every time the host opens the port, and
+ * its TX line glitches random bytes into this console as it does - bare
+ * single-character commands got executed by line noise (a phantom 'x'
+ * overwrote the test pattern, a phantom '5' reprogrammed the ISP format,
+ * and hours went into chasing the resulting ghosts). A ':' prefix makes
+ * phantom commands improbable; anything unarmed is dropped silently. */
 void console_poll(void) {
-    if(read32(UART0 + UART_LSR) & UART_LSR_DR)
-        dispatch((char)(read32(UART0 + UART_RBR) & 0xFF));
+    static uint8_t armed = 0;
+    char c;
+    if(!(read32(UART0 + UART_LSR) & UART_LSR_DR)) return;
+    c = (char)(read32(UART0 + UART_RBR) & 0xFF);
+    if(armed) {
+        armed = 0;
+        dispatch(c);
+    } else if(c == ':') {
+        armed = 1;
+    }
 }

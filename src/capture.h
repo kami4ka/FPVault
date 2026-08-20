@@ -34,6 +34,7 @@ typedef enum { VID_NTSC = 0, VID_PAL = 1 } vid_std_e;
 typedef enum { CAP_FMT_422 = 0, CAP_FMT_420 = 1 } cap_fmt_e;
 
 void capture_init(void); /* TVD bring-up, NTSC until auto-follow says otherwise */
+void capture_stop(void); /* disable the TVD DMA (diagnostics) */
 
 void capture_set_standard(vid_std_e s);
 void capture_set_fmt(cap_fmt_e f); /* re-inits the ring */

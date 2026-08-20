@@ -18,6 +18,7 @@
 #include "system.h"
 #include "console.h"
 #include "enctest.h"
+#include "capture.h"
 #include "arm32.h"
 #include "f1c100s_gpio.h"
 #include "f1c100s_timer.h"
@@ -51,16 +52,30 @@ int main(void) {
 
     {
         uint32_t t_sec = tim_get_cnt(TIM0);
+        uint32_t t_follow = t_sec;
         int led = 0;
 
         while(1) {
             wdg_feed();
             console_poll();
 
-            /* 1 Hz housekeeping: LED heartbeat + uptime. */
+            /* M3: capture ring + per-frame hardware encode. */
+            enctest_live_tick();
+
+            /* 20 ms cadence: input-standard auto-follow. Timer-paced, NOT
+             * frame-paced: with no signal there are no frames, and that is
+             * exactly when auto-follow has work to do. */
+            if(enctest_live_active() &&
+               (uint32_t)(t_follow - tim_get_cnt(TIM0)) >= TICKS_PER_SEC / 50u) {
+                t_follow -= TICKS_PER_SEC / 50u;
+                capture_follow_input();
+            }
+
+            /* 1 Hz housekeeping: LED heartbeat + uptime + live stats. */
             if((uint32_t)(t_sec - tim_get_cnt(TIM0)) >= TICKS_PER_SEC) {
                 t_sec -= TICKS_PER_SEC;
                 uptime_s++;
+                enctest_live_stats();
                 led ^= 1;
                 if(led)
                     gpio_pin_set(LED_PORT, LED_PIN);
