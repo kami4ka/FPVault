@@ -177,8 +177,19 @@ const uint8_t* capture_c(int b) {
  * evidence but sustained disagreement drains it. */
 #define STD_HYST 30
 
+/* Color-system experiment: a 525-line camera can carry NTSC or PAL-M
+ * color; demodulating with the wrong subcarrier yields weak, washed-out
+ * chroma while line/field lock stays perfect. Forcing suspends follow. */
+static uint8_t mode_forced = 0;
+
+void capture_force_colormode(int palm) {
+    mode_forced = 1;
+    tvd_set_mode(palm ? TVD_MODE_PAL_M : TVD_MODE_NTSC);
+}
+
 void capture_follow_input(void) {
     static int agree = 0;
+    if(mode_forced) return;
     uint32_t st = tvd_get_state();
     vid_std_e want;
 
