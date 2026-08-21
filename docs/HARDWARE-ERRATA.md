@@ -43,6 +43,14 @@ socket. A bench retrofit of 220 uF across SD VDD-GND is the confirming
 experiment. (Firmware debt noted separately: a card dying mid-write
 should degrade to NO_CARD without tripping the watchdog.)
 
+The retrofit's verdict, same day: with 220 uF soldered at the SD socket,
+a 16-segment / 80-minute recording soak on a power bank ran clean
+(previous best on the same supply: ~12 minutes), and 5.1 GB of sustained
+USB mass-storage reads served without a hiccup - the same read load that
+had crashed the firmware twice at 15 MB and 130 MB before the capacitor.
+All three observed failure classes (recording resets, card latch-up,
+USB-read crashes) trace to the one root cause and stop with the one fix.
+
 ## 2. A SoC reset does not power-cycle the SD card
 
 The watchdog/brownout reset line restarts the SoC but SD VDD never drops.
