@@ -70,12 +70,12 @@ static const uint8_t msc_descriptor[] = {
     MSC_DESCRIPTOR_INIT(0x00, MSC_OUT_EP, MSC_IN_EP, MSC_MAX_MPS, 0x02),
     /* string0: language */
     USB_LANGID_INIT(USBD_LANGID_STRING),
-    /* string1: manufacturer "f1c200s-dvr" */
-    0x18, USB_DESCRIPTOR_TYPE_STRING,
-    'f',0, '1',0, 'c',0, '2',0, '0',0, '0',0, 's',0, '-',0, 'd',0, 'v',0, 'r',0,
-    /* string2: product "DVR SD Card" */
-    0x18, USB_DESCRIPTOR_TYPE_STRING,
-    'D',0, 'V',0, 'R',0, ' ',0, 'S',0, 'D',0, ' ',0, 'C',0, 'a',0, 'r',0, 'd',0,
+    /* string1: manufacturer "FPVault" */
+    0x10, USB_DESCRIPTOR_TYPE_STRING,
+    'F',0, 'P',0, 'V',0, 'a',0, 'u',0, 'l',0, 't',0,
+    /* string2: product "FPVault SD Card" */
+    0x20, USB_DESCRIPTOR_TYPE_STRING,
+    'F',0, 'P',0, 'V',0, 'a',0, 'u',0, 'l',0, 't',0, ' ',0, 'S',0, 'D',0, ' ',0, 'C',0, 'a',0, 'r',0, 'd',0,
     /* string3: serial "00000001" */
     0x12, USB_DESCRIPTOR_TYPE_STRING,
     '0',0, '0',0, '0',0, '0',0, '0',0, '0',0, '0',0, '1',0,

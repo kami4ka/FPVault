@@ -1,4 +1,4 @@
-# f1c200s-dvr
+# FPVault
 
 [English](README.md) | Українська
 
@@ -92,7 +92,7 @@ microSD, піни CVBS `TV IN` і гребінка `TV_OUT`, PMIC EA3059C. Ос�
 Потрібні `arm-none-eabi-gcc` (перевірено з 14.2) і GNU make.
 
 ```sh
-make            # build/dvr.bin
+make            # build/fpvault.bin
 make deploy     # надіслати на плату, що стоїть у промпті U-Boot (YMODEM)
 ```
 

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  *
- * f1c200s-dvr - open-source airborne FPV DVR on the Allwinner F1C200s.
+ * FPVault - open-source airborne FPV DVR on the Allwinner F1C200s.
  *
  *   CVBS camera -> TVD (its own DMA) -> DDR NV16 ring
  *                -> Cedar VE hardware JPEG encode -> DDR bitstream ring

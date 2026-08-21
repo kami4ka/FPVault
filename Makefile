@@ -1,5 +1,5 @@
 #
-# f1c200s-dvr - open-source airborne FPV DVR.
+# FPVault - open-source airborne FPV DVR.
 #
 # CVBS camera -> TVD DMA -> Cedar VE hardware JPEG -> SD (MJPEG-in-AVI).
 # Record-only tap: no video output path.
@@ -8,7 +8,7 @@
 # Deploy:  make deploy     (U-Boot on the board: loady 0x80000000 + go)
 #
 
-PROJECT_NAME = dvr
+PROJECT_NAME = fpvault
 
 PROJROOT := vendor/F1C100s_projects
 

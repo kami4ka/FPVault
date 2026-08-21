@@ -17,7 +17,7 @@ English | [Українська](BRINGUP.uk.md)
 ## Deploy
 
 ```sh
-make            # build/dvr.bin
+make            # build/fpvault.bin
 make deploy     # YMODEM to 0x80000000 + go (tools/loader.py)
 ```
 

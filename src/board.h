@@ -13,7 +13,7 @@
 #include <stdint.h>
 
 /* ---- identity ----------------------------------------------------------- */
-#define BOARD_NAME "f1c200s-dvr"
+#define BOARD_NAME "FPVault"
 
 /* ---- DRAM map (64 MB, flat MMU, virt == phys) ---------------------------
  *

@@ -1,4 +1,4 @@
-# f1c200s-dvr
+# FPVault
 
 English | [Українська](README.uk.md)
 
@@ -85,7 +85,7 @@ real soldering pads.
 Needs `arm-none-eabi-gcc` (tested with 14.2) and GNU make.
 
 ```sh
-make            # build/dvr.bin
+make            # build/fpvault.bin
 make deploy     # send to a board sitting at the U-Boot prompt (YMODEM)
 ```
 

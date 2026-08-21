@@ -17,7 +17,7 @@
 ## Розгортання
 
 ```sh
-make            # build/dvr.bin
+make            # build/fpvault.bin
 make deploy     # YMODEM на 0x80000000 + go (tools/loader.py)
 ```
 
