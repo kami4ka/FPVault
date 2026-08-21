@@ -62,6 +62,9 @@ could never re-initialize. Fix for the next spin: a high-side switch
 (P-FET) on SD VDD under GPIO control, so firmware can power-cycle a
 wedged card in flight. Until then, a wedged card means lost recording
 time until the next battery swap - the already-recorded clips stay safe.
+Note: the bench bulk-capacitor retrofit makes it WORSE to recover by
+unplugging - the cap holds the card's rail up for minutes, so only
+ejecting the card from the socket actually power-cycles it.
 
 ## 3. Serial console path glitches
 
