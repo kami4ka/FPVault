@@ -35,6 +35,7 @@
 
 #define AVI_HDR_SIZE     224u
 #define OFF_RIFFSZ         4u
+#define OFF_FLAGS         44u
 #define OFF_TOTALFRAMES   48u
 #define OFF_STRH_LEN     140u
 #define OFF_MOVISZ       216u
@@ -155,8 +156,12 @@ int avi_start(avi_t* a, const avi_io_t* io, uint16_t w, uint16_t h,
     /* Read-ahead hint only; a quarter of the uncompressed byte rate is a
      * generous ceiling for MJPEG. */
     maxbps = (uint32_t)((uint64_t)w * h * 3u * rate / scale / 4u);
-    flags = AVIF_ISINTERLEAVED |
-            (idx_buf ? AVIF_HASINDEX : 0u); /* promise idx1 only if we can */
+    /* The live header must NOT promise idx1: a power cut leaves the file
+     * without one, and index-trusting players then refuse a clip whose
+     * every frame is actually intact (observed: the last clip of every
+     * crash-ended session "can't be played"). avi_finalize() sets
+     * AVIF_HASINDEX in the same breath as writing the index itself. */
+    flags = AVIF_ISINTERLEAVED;
 
     /* Placeholder counts describe a valid EMPTY movie, so a file cut before
      * the first refresh still opens. */
@@ -313,6 +318,9 @@ int avi_finalize(avi_t* a)
         if (n && wr(a, a->idx, n * 16u))
             return a->error;
         riffsz += 8u + n * 16u;
+        /* The index now exists - only now may the header claim it. */
+        if (patch32(a, OFF_FLAGS, AVIF_ISINTERLEAVED | AVIF_HASINDEX))
+            return a->error;
     }
     if (patch_header(a, riffsz))
         return a->error;
