@@ -59,7 +59,7 @@ Early bring-up. Milestones:
       (CherryUSB device stack on the MUSB controller, Full-Speed for now)
 
 Power the board with a card inserted and it records — no host, no
-commands. See docs/img/final-true-color.png for what it sees.
+commands.
 
 Host test suite: `make -C tests/host` (no cross-toolchain needed).
 
