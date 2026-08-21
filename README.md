@@ -8,17 +8,7 @@ Records an analog CVBS camera to SD card as MJPEG-in-AVI with near-zero CPU
 load: every stage of the pipeline is a hardware peripheral, and the ARM926
 core only orchestrates.
 
-```
-CVBS camera ──> TVD (TV decoder, own DMA) ──> DDR (semi-planar YUV422 ring)
-                                                   │
-                                                   ▼
-                                    Cedar VE hardware JPEG encoder
-                                                   │  bitstream ring
-                                                   ▼
-                              SD card, 4-bit @ 50 MHz + descriptor DMA
-                                                   ▼
-                            /DCIM/100FCDVR/FCDV0001.AVI  (DCF naming)
-```
+![FPVault pipeline](docs/img/pipeline.svg)
 
 - **Bare metal** — no Linux, no RTOS. One binary, single main loop, a handful
   of interrupts.

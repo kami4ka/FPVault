@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="560" viewBox="0 0 760 560" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"/>
+    </marker>
+  </defs>
+
+  <!-- CVBS-камера -->
+  <rect x="130" y="10" width="340" height="56" rx="10" fill="#d97706"/>
+  <text x="300" y="33" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="600">CVBS-камера</text>
+  <text x="300" y="52" text-anchor="middle" fill="#ffffff" fill-opacity="0.85" font-size="12">аналогова PAL / NTSC, D1</text>
+
+  <line x1="300" y1="66" x2="300" y2="100" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- TVD -->
+  <rect x="130" y="106" width="340" height="56" rx="10" fill="#2563eb"/>
+  <text x="300" y="129" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="600">TVD — ТВ-декодер</text>
+  <text x="300" y="148" text-anchor="middle" fill="#ffffff" fill-opacity="0.85" font-size="12">апаратний CVBS → цифровий YUV, власний DMA</text>
+
+  <line x1="300" y1="162" x2="300" y2="196" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Кільце в DDR -->
+  <rect x="130" y="202" width="340" height="56" rx="10" fill="#475569"/>
+  <text x="300" y="225" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="600">Кільце захоплення в DDR</text>
+  <text x="300" y="244" text-anchor="middle" fill="#ffffff" fill-opacity="0.85" font-size="12">semi-planar YUV, 3 буфери</text>
+
+  <line x1="300" y1="258" x2="300" y2="292" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Cedar VE -->
+  <rect x="130" y="298" width="340" height="56" rx="10" fill="#7c3aed"/>
+  <text x="300" y="321" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="600">Cedar VE — апаратний JPEG-кодер</text>
+  <text x="300" y="340" text-anchor="middle" fill="#ffffff" fill-opacity="0.85" font-size="12">2,9 мс/кадр @ 300 МГц</text>
+
+  <line x1="300" y1="354" x2="300" y2="388" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="312" y="375" fill="#8b949e" font-size="12">кільце бітстріму · 40 слотів</text>
+
+  <!-- SD-карта -->
+  <rect x="130" y="394" width="340" height="56" rx="10" fill="#059669"/>
+  <text x="300" y="417" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="600">SD-карта</text>
+  <text x="300" y="436" text-anchor="middle" fill="#ffffff" fill-opacity="0.85" font-size="12">4-біт @ 50 МГц + дескрипторний DMA</text>
+
+  <line x1="300" y1="450" x2="300" y2="484" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Результат -->
+  <rect x="130" y="490" width="340" height="56" rx="10" fill="#334155"/>
+  <text x="300" y="513" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">/DCIM/100FCDVR/FCDV0001.AVI</text>
+  <text x="300" y="532" text-anchor="middle" fill="#ffffff" fill-opacity="0.85" font-size="12">MJPEG-in-AVI · іменування DCF</text>
+
+  <!-- Примітка про CPU -->
+  <rect x="520" y="250" width="222" height="80" rx="10" fill="none" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="631" y="278" text-anchor="middle" fill="#8b949e" font-size="13" font-weight="600">CPU ARM926</text>
+  <text x="631" y="297" text-anchor="middle" fill="#8b949e" font-size="12">лише оркестрація —</text>
+  <text x="631" y="314" text-anchor="middle" fill="#8b949e" font-size="12">не торкається жодного пікселя</text>
+  <line x1="470" y1="290" x2="520" y2="290" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="6 4"/>
+</svg>
