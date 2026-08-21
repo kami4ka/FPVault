@@ -1,4 +1,4 @@
-# FPVault
+<p align="center"><img src="docs/img/logo.png" alt="FPVault" width="460"></p>
 
 English | [Українська](README.uk.md)
 
