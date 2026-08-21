@@ -1,5 +1,7 @@
 # Credits
 
+English | [Українська](CREDITS.uk.md)
+
 This firmware stands on prior work:
 
 - **[nminaylov/F1C100s_projects](https://github.com/nminaylov/F1C100s_projects)**

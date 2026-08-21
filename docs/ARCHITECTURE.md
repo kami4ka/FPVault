@@ -1,5 +1,7 @@
 # Architecture
 
+English | [Українська](ARCHITECTURE.uk.md)
+
 ## Pipeline
 
 ```

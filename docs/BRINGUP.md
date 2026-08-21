@@ -1,5 +1,7 @@
 # Bring-up
 
+English | [Українська](BRINGUP.uk.md)
+
 ## Bench setup
 
 - Board at the U-Boot prompt (U-Boot lives on SPI-NOR; the DVR binary is

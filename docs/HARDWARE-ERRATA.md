@@ -1,5 +1,7 @@
 # Hardware errata (current board revision)
 
+English | [Українська](HARDWARE-ERRATA.uk.md)
+
 Observations from bring-up that firmware cannot fix; targets for the next
 board spin.
 

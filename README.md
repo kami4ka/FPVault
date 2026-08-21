@@ -1,5 +1,7 @@
 # f1c200s-dvr
 
+English | [Українська](README.uk.md)
+
 Open-source airborne FPV DVR firmware for the Allwinner F1C200s.
 
 Records an analog CVBS camera to SD card as MJPEG-in-AVI with near-zero CPU
@@ -93,7 +95,7 @@ port defaults to `/dev/cu.usbserial-0001`; override with `make deploy
 PORT=...`. Console: 115200 8N1 on UART0 (PE0/PE1), single-character commands,
 `s` = state, `r` = reset.
 
-## Hardware
+## Hardware requirements
 
 Any F1C200s board with: CVBS input to TV_IN, SD card on SDC0 (PF0–PF5,
 4-bit), SPI-NOR on SPI0, UART0 console. UART1 (PA2/PA3) connects to the
