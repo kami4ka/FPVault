@@ -43,6 +43,17 @@
 
 #define TESTPAT_BASE   0x80800000u
 
+/* Reset-cause breadcrumbs. DRAM retains content across a watchdog reset
+ * (only real power removal clears it), so the exception handlers and the
+ * main loop leave notes here and the next boot reads them back: a reset
+ * then reports itself as crash (with pc/lr), hang (stale heartbeat), or
+ * true power loss (DRAM garbage). 0x8380_0000 sits in the free window,
+ * clear of everything above AND of U-Boot, which relocates itself to the
+ * top megabytes of DRAM. */
+#define BREADCRUMB_BASE   0x83800000u
+#define BC_CRASH_MAGIC    0xDEADFA11u
+#define BC_ALIVE_MAGIC    0xA11FE001u
+
 #define CAP_PLANE_SPACING 0x400000u              /* 4 MB */
 #define CAP_NBUF          3
 #define CAP_REGION_SIZE   (CAP_NBUF * 2 * CAP_PLANE_SPACING) /* 24 MB incl. guard */

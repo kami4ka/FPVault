@@ -50,6 +50,27 @@ int main(void) {
     printf("\r\n[%s] up. build %s %s (%s). s state, r reset\r\n",
            BOARD_NAME, __DATE__, __TIME__, GIT_REV);
 
+    /* Reset-cause breadcrumbs (board.h): DRAM survives warm resets, so the
+     * previous life reports how it ended. Crash marks name the faulting
+     * pc/lr even when the crash-time UART dump came out as garbage. */
+    {
+        volatile uint32_t* bc = (volatile uint32_t*)BREADCRUMB_BASE;
+        if(bc[0] == BC_CRASH_MAGIC)
+            printf("[boot] previous reset: CRASH type %lu pc %08lx lr %08lx "
+                   "at uptime %lus\r\n",
+                   (unsigned long)bc[3], (unsigned long)bc[1],
+                   (unsigned long)bc[2], (unsigned long)bc[5]);
+        else if(bc[4] == BC_ALIVE_MAGIC)
+            printf("[boot] previous reset: warm, no crash mark, heartbeat "
+                   "at uptime %lus (hang+watchdog or supply dip)\r\n",
+                   (unsigned long)bc[5]);
+        else
+            printf("[boot] cold power-on (no breadcrumbs)\r\n");
+        bc[0] = 0;
+        bc[5] = 0;
+        bc[4] = BC_ALIVE_MAGIC;
+    }
+
     gpio_init(LED_PORT, LED_PIN, GPIO_MODE_OUTPUT, GPIO_PULL_NONE, GPIO_DRV_3);
     wdg_init(WDG_MODE_RESET, WDG_INTV_6S);
 
@@ -99,6 +120,7 @@ int main(void) {
         uint32_t t_led = t_sec;
         while(1) {
             wdg_feed();
+            ((volatile uint32_t*)BREADCRUMB_BASE)[5] = uptime_s; /* heartbeat */
             console_poll();
             fclink_poll();
             recorder_task();
