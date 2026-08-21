@@ -43,8 +43,11 @@ Early bring-up. Milestones:
       DCF naming, dropout policy, LED state UX
 - [x] M6 — RunCam Device Protocol live on UART1 (Betaflight/INAV/ArduPilot)
       — *bench-tested against the fuzz suite; real-FC session pending*
-- [ ] M7 — endurance and fault-injection hardening — *stall injection and
-      power-cut recovery pass; hour-soak clip verification pending*
+- [ ] M7 — endurance and fault-injection hardening — *crash safety
+      verified against 5 real unplanned power cuts: every clip playable
+      to within 1 frame (33 ms) of the cut; stall injection passes;
+      uninterrupted hour soak still pending (blocked on a stable bench
+      supply — see docs/HARDWARE-ERRATA.md)*
 - [x] M8 — standalone SPI-NOR boot: cold power → recording in ~5 s
       (U-Boot with baked-in bootcmd at NOR 0, firmware at NOR 0x100000)
 - [x] M9 — USB mass storage: connect to a computer, the card mounts

@@ -27,7 +27,26 @@ Both failure modes are absorbed by the firmware's crash-safe design
 recording), but a flight-worthy board should not brown out this easily -
 vibration and connector strain are the airborne equivalents of a finger.
 
-## 2. Serial console path glitches
+Soak data point (2026-08-21): ~35 minutes recording on a USB power bank
+produced 5 spontaneous resets; the same firmware recording on a computer's
+USB port produced none. Soft supplies plus SD write-current spikes cross
+the reset threshold. Every reset cost exactly one video frame (the
+crash-safe design absorbed all five), but the supply margins are the
+board's, not the firmware's, to fix.
+
+## 2. A SoC reset does not power-cycle the SD card
+
+The watchdog/brownout reset line restarts the SoC but SD VDD never drops.
+A card that a mid-write reset leaves in a wedged state stays wedged
+through any number of reboots — `sdcard_detect` fails (`mount FAILED
+fr=3`) forever, and only physically removing power revives it. Observed
+once at the end of the power-bank soak: the board rebooted into a card it
+could never re-initialize. Fix for the next spin: a high-side switch
+(P-FET) on SD VDD under GPIO control, so firmware can power-cycle a
+wedged card in flight. Until then, a wedged card means lost recording
+time until the next battery swap - the already-recorded clips stay safe.
+
+## 3. Serial console path glitches
 
 The in-line ESP32 USB-serial bridge reboots on every host port open and
 sprays noise bytes into the console (this is why console commands require
