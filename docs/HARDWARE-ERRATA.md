@@ -27,12 +27,21 @@ Both failure modes are absorbed by the firmware's crash-safe design
 recording), but a flight-worthy board should not brown out this easily -
 vibration and connector strain are the airborne equivalents of a finger.
 
-Soak data point (2026-08-21): ~35 minutes recording on a USB power bank
-produced 5 spontaneous resets; the same firmware recording on a computer's
-USB port produced none. Soft supplies plus SD write-current spikes cross
-the reset threshold. Every reset cost exactly one video frame (the
-crash-safe design absorbed all five), but the supply margins are the
-board's, not the firmware's, to fix.
+Soak data (2026-08-21, revised by a timestamped repro): ~35 minutes on a
+USB power bank produced 5 spontaneous resets, a wall charger produced 2
+more, a computer's USB port produced none. The timestamped capture shows
+the true sequence: the recording is healthy, then 11 s of silence, then
+U-Boot - and U-Boot itself logs "Card did not respond to voltage select!
+-110". So the write-current spike dips the rail at the CARD, the card's
+controller latches up, the firmware hangs on the dead card until the
+watchdog reboots the SoC. Sometimes the card un-latches during the
+reboot (recording resumes in a new session), sometimes it stays latched
+until power is physically removed (see #2). Every event cost exactly one
+video frame plus the re-boot gap - the crash-safe design absorbed all of
+them - but the fix is the board's: bulk capacitance (>=100 uF) at the SD
+socket. A bench retrofit of 220 uF across SD VDD-GND is the confirming
+experiment. (Firmware debt noted separately: a card dying mid-write
+should degrade to NO_CARD without tripping the watchdog.)
 
 ## 2. A SoC reset does not power-cycle the SD card
 
