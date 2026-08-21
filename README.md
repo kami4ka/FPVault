@@ -63,6 +63,21 @@ commands.
 
 Host test suite: `make -C tests/host` (no cross-toolchain needed).
 
+## Hardware
+
+![development board](docs/img/dev-board.jpg)
+
+The development board everything above was brought up on: F1C200s (under
+the heatsink), 16 MB W25Q128 SPI-NOR, USB-C (power + the mass-storage
+card reader), microSD socket, CVBS `TV IN` pins and a `TV_OUT` header,
+EA3059C PMIC. Quirks of this revision are collected in
+docs/HARDWARE-ERRATA.md.
+
+A proper DVR board is in development: an analog bypass so the unit can
+sit inline in the video link (camera in, VTX out — the firmware stays a
+record-only tap; the bypass is passive analog), plus mounting holes and
+real soldering pads.
+
 ## Building
 
 Needs `arm-none-eabi-gcc` (tested with 14.2) and GNU make.
