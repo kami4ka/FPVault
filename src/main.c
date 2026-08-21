@@ -133,10 +133,12 @@ int main(void) {
             if((uint32_t)(t_led - tim_get_cnt(TIM0)) >= TICKS_PER_SEC / 8u) {
                 t_led -= TICKS_PER_SEC / 8u;
                 led = (led + 1) & 7;
+                /* Active-low LED (lit at the pin's reset-low level), and
+                 * gpio_pin_set/clear take a pin NUMBER, not the mask. */
                 if((recorder_led_pattern() >> (7 - led)) & 1)
-                    gpio_pin_set(LED_PORT, LED_PIN);
+                    gpio_pin_clear(LED_PORT, LED_PIN_N);
                 else
-                    gpio_pin_clear(LED_PORT, LED_PIN);
+                    gpio_pin_set(LED_PORT, LED_PIN_N);
             }
 
             /* 1 Hz housekeeping. */

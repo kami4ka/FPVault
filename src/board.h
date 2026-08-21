@@ -91,7 +91,10 @@
  *          and that one belongs to the VTX/display end)
  */
 #define LED_PORT  GPIOE
-#define LED_PIN   PIN3
+#define LED_PIN   PIN3 /* mask, for gpio_init */
+#define LED_PIN_N 3    /* number, for gpio_pin_set/clear - these take 1<<n.
+                        * Passing the PIN3 mask here toggled PE8 for months
+                        * while the LED sat solid at PE3's reset level. */
 
 /* ---- timebase ----------------------------------------------------------- */
 #define TICKS_PER_SEC 24000000u   /* TIM0 free-running at HOSC 24 MHz */
