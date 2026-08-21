@@ -26,6 +26,53 @@ make deploy     # YMODEM на 0x80000000 + go (tools/loader.py)
 формату ISP, `J` кодування тест-патерну (лише таймінг), `j` кодування +
 base64-дамп JPEG.
 
+## Прошивання через USB — FEL (чиста або «зацеглена» плата, без UART)
+
+FEL — режим відновлення в масковому ROM самого SoC: коли BROM не знаходить
+завантажувального образу, він з'являється як USB-пристрій на тому самому
+USB-C, що живить плату, і приймає завантаження. Тож щойно запаяна плата
+прошивається одним лише USB-кабелем:
+
+- **Чистий NOR** (свіжа плата): підключіть до комп'ютера — BROM сам
+  провалюється у FEL.
+- **Зайнятий або «зацеглений» NOR**: тримайте **SW2 під час підключення**.
+  SW2 замикає пін NOR, тож SPI-проба BROM зазнає невдачі, і він потрапляє
+  у FEL; відпустіть кнопку, щойно пристрій з'явився (~1 с). Сама
+  флеш-пам'ять неушкоджена — коротке замикання лише «сліпить» пробу BROM.
+
+На хості потрібні [sunxi-tools](https://github.com/linux-sunxi/sunxi-tools)
+(`brew install sunxi-tools` / `apt install sunxi-tools`). Перевірка зв'язку:
+
+```sh
+sunxi-fel ver        # очікуйте: AWUSBFEX soc=00001663 (F1C100s/F1C200s)
+```
+
+Запис обох образів (U-Boot за адресою 0, прошивка з 1 МБ):
+
+```sh
+sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl.bin
+sunxi-fel -p spiflash-write 0x100000 build/fpvault.bin
+```
+
+Цикл живлення — і плата за ~5 с завантажується в запис. UART не потрібен
+взагалі, хоча коли U-Boot уже в NOR, послідовний цикл `make deploy` вище —
+швидший спосіб ітерувати прошивку.
+
+Обидва бінарники прикріплені до GitHub Releases проєкту. Щоб зібрати
+U-Boot самостійно (мейнлайн v2026.07 + два файли з `uboot/`):
+
+```sh
+git clone --depth 1 -b v2026.07 https://source.denx.de/u-boot/u-boot.git
+cp uboot/f1c200s_dvr_defconfig          u-boot/configs/
+cp uboot/suniv-f1c200s-video-board.dts  u-boot/dts/upstream/src/arm/allwinner/
+make -C u-boot f1c200s_dvr_defconfig
+make -C u-boot CROSS_COMPILE=arm-none-eabi- -j8
+# результат: u-boot/u-boot-sunxi-with-spl.bin
+```
+
+Уся історія завантаження — в defconfig: `CONFIG_BOOTCOMMAND="sf probe;
+sf read 0x80000000 0x100000 0x40000; go 0x80000000"`, автозапуск за 1 с.
+
 ## M1 — перше світло VE (go/no-go)
 
 Єдине по-справжньому відкрите питання щодо кремнію: чи відповідає
