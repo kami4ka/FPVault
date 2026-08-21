@@ -36,7 +36,7 @@ CVBS camera ──> TVD (TV decoder, own DMA) ──> DDR (semi-planar YUV422 ri
   terminate the line; exactly one 75 Ω per link, and it belongs at the
   VTX/display end.
 - **USB card reader built in** — plug the board into a computer and the SD
-  card mounts as USB mass storage ("DVR SD Card"); no card removal, no
+  card mounts as USB mass storage ("FPVault SD Card"); no card removal, no
   extra files on the card. Powered by anything that is not a computer
   (charger, FC 5 V), it records instead.
 
