@@ -22,10 +22,15 @@ SRCS += src/main.c src/system.c src/exception.c src/console.c src/capture.c \
         src/ve.c src/vejpeg.c src/jpegtab.c src/testpat.c src/enctest.c \
         src/avi.c src/dcf.c src/runcam.c \
         src/sdc.c src/sdcard.c src/diskio.c src/sdtest.c src/recorder.c \
-        src/pipeline.c src/fclink.c \
+        src/pipeline.c src/fclink.c src/usbmsc.c src/usbphy.c \
+        vendor/cherryusb/core/usbd_core.c \
+        vendor/cherryusb/class/msc/usbd_msc.c \
+        vendor/cherryusb/port/usb_dc_musb.c \
         vendor/fatfs/ff.c vendor/fatfs/ffsystem.c vendor/fatfs/ffunicode.c
 
-INCLUDES += -Ivendor/fatfs
+INCLUDES += -Ivendor/fatfs -Ivendor/cherryusb -Ivendor/cherryusb/common \
+            -Ivendor/cherryusb/core -Ivendor/cherryusb/class/msc \
+            -Ivendor/cherryusb/port
 
 INCLUDES += -Isrc
 

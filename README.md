@@ -33,6 +33,10 @@ CVBS camera ──> TVD (TV decoder, own DMA) ──> DDR (semi-planar YUV422 ri
   nothing to the video chain. Tap high-impedance: the DVR input must NOT
   terminate the line; exactly one 75 Ω per link, and it belongs at the
   VTX/display end.
+- **USB card reader built in** — plug the board into a computer and the SD
+  card mounts as USB mass storage ("DVR SD Card"); no card removal, no
+  extra files on the card. Powered by anything that is not a computer
+  (charger, FC 5 V), it records instead.
 
 ## Status
 
@@ -47,8 +51,12 @@ Early bring-up. Milestones:
       DCF naming, dropout policy, LED state UX
 - [x] M6 — RunCam Device Protocol live on UART1 (Betaflight/INAV/ArduPilot)
       — *bench-tested against the fuzz suite; real-FC session pending*
-- [ ] M7 — endurance and fault-injection hardening
-- [ ] M8 — standalone SPI-NOR boot image, v1.0
+- [ ] M7 — endurance and fault-injection hardening — *stall injection and
+      power-cut recovery pass; hour-soak clip verification pending*
+- [x] M8 — standalone SPI-NOR boot: cold power → recording in ~5 s
+      (U-Boot with baked-in bootcmd at NOR 0, firmware at NOR 0x100000)
+- [x] M9 — USB mass storage: connect to a computer, the card mounts
+      (CherryUSB device stack on the MUSB controller, Full-Speed for now)
 
 Power the board with a card inserted and it records — no host, no
 commands. See docs/img/final-true-color.png for what it sees.

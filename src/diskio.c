@@ -29,6 +29,12 @@ sdcard_t* disk_card(void) {
     return &card;
 }
 
+/* Card hardware up without any filesystem - the USB mass-storage path
+ * hands raw sectors to a host that brings its own FS. */
+int disk_raw_init(void) {
+    return (disk_initialize(0) == 0) ? 0 : -1;
+}
+
 /* Runtime width selection: the first mount stays 1-bit (the only mode ever
  * proven on this board) so the boot-region scrub cannot be blocked by a
  * 4-bit bring-up problem; the bench then switches and remounts. Returns

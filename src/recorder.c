@@ -12,6 +12,7 @@
 #include "jpegtab.h"
 #include "capture.h"
 #include "pipeline.h"
+#include "usbmsc.h"
 #include "f1c100s_timer.h"
 #include "ff.h"
 
@@ -74,6 +75,7 @@ typedef enum {
     REC_RECORDING,
     REC_MANUAL_STOP,  /* user said stop - no auto restart until told */
     REC_ERROR,        /* fell over; retries the card after a pause */
+    REC_USB_MODE,     /* a USB host owns the card until the next boot */
 } rec_state_e;
 
 static avi_t avi;
@@ -184,6 +186,23 @@ void recorder_toggle_auto(void) {
 
 /* The state machine; call every main-loop pass (cheap). */
 void recorder_task(void) {
+    /* A configured USB host takes precedence over everything: finalize,
+     * unmount, hand the raw card over. USB is also this board's power
+     * source, so "host detached" equals "reboot" - no way back needed. */
+    if(usbmsc_host_present() && state != REC_USB_MODE) {
+        extern int disk_raw_init(void);
+        clip_stop();
+        sdtest_unmount();
+        /* Raw card init (no FS) - in pure-reader boots the recorder never
+         * mounted, so the SD hardware needs bringing up here. */
+        if(disk_raw_init() == 0)
+            usbmsc_set_ready();
+        else
+            printf("[rec] USB mode but no card responds\r\n");
+        enter(REC_USB_MODE);
+        return;
+    }
+
     switch(state) {
     case REC_NO_CARD:
         if(sdtest_is_mounted()) {
@@ -248,6 +267,9 @@ void recorder_task(void) {
             enter(REC_NO_CARD);
         }
         break;
+
+    case REC_USB_MODE:
+        break;
     }
 }
 
@@ -259,6 +281,7 @@ uint8_t recorder_led_pattern(void) {
     case REC_MANUAL_STOP: return 0xC0;
     case REC_NO_CARD: return 0xA0; /* double blink */
     case REC_ERROR: return 0xAA;   /* fast blink */
+    case REC_USB_MODE: return 0x99;
     }
     return 0;
 }
@@ -324,7 +347,7 @@ void recorder_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) 
 
 void recorder_stats(void) {
     static const char* names[] = {"NO_CARD", "WAIT_SIGNAL", "RECORDING",
-                                  "MANUAL_STOP", "ERROR"};
+                                  "MANUAL_STOP", "ERROR", "USB_MODE"};
     if(state == REC_RECORDING)
         printf("[rec] %s: %lu frames, %lu drops, wr max %lu us, seg %lu\r\n",
                clip_path, (unsigned long)frames_written, (unsigned long)drops,

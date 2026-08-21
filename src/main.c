@@ -22,6 +22,7 @@
 #include "recorder.h"
 #include "pipeline.h"
 #include "fclink.h"
+#include "usbmsc.h"
 #include "arm32.h"
 #include "f1c100s_gpio.h"
 #include "f1c100s_intc.h"
@@ -75,6 +76,21 @@ int main(void) {
      * it (:R manual toggle, :A auto on/off). */
     pipeline_toggle();
     fclink_init();
+    usbmsc_init();
+
+    /* Mode fork: USB is this board's power source, so a host can only be
+     * present from power-on. Give enumeration a short window; if a host
+     * configures us, the recorder yields before ever mounting the card
+     * and the board is a pure card reader until reboot. In the air no
+     * host exists, the window expires, and recording starts ~2 s later
+     * than it otherwise would - the only cost of the feature. */
+    {
+        uint32_t t0 = tim_get_cnt(TIM0);
+        while((uint32_t)(t0 - tim_get_cnt(TIM0)) < TICKS_PER_SEC * 5u / 2u) {
+            wdg_feed();
+            if(usbmsc_host_present()) break;
+        }
+    }
 
     {
         uint32_t t_sec = tim_get_cnt(TIM0);
@@ -108,6 +124,7 @@ int main(void) {
                 pipeline_stats();
                 recorder_stats();
                 fclink_stats();
+                usbmsc_stats();
             }
         }
     }

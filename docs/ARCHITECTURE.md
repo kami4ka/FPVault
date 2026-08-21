@@ -77,3 +77,30 @@ src/board.h: BSRING_CHUNK_OFF / BSRING_PREFIX_OFF / BSRING_DATA_OFF.
 DCF (JEITA CP-3461): `/DCIM/NNNFCDVR/FCDV####.AVI`, 8.3 uppercase, global
 monotonic file index (never reused), new NNN directory per power-on
 session, boot-time scan is the authority. See src/dcf.h.
+
+## USB mass storage (card reader mode)
+
+Plugging the board into a computer must "just show the videos" - and the
+board is USB-powered, so a USB host can only ever be present from power-on.
+That collapses the design into a boot-time fork (src/main.c):
+
+- `usbmsc_init()` brings the SD card up **raw, no filesystem** first
+  (`disk_raw_init`), because CherryUSB caches the reported capacity exactly
+  once, inside `usbd_msc_init_intf`. Registering the interface with the
+  card down tells the host "0 blocks" forever and every READ(10) then dies
+  on the stack's own LBA range check - found the hard way.
+- After init, main waits up to 2.5 s for a SET_CONFIGURATION from a host.
+  A charger or a flight controller's 5 V rail never configures, so in the
+  air the window expires and recording starts ~2 s late - the entire cost
+  of the feature. A computer configures within the window, the recorder
+  enters `REC_USB_MODE` before ever mounting the card, and the board is a
+  pure card reader until reboot.
+- The MSC class runs entirely in the USB IRQ (no thread, no RTOS): sector
+  reads/writes go straight to `sdcard_read/write` on the raw card. FatFs
+  never runs in reader mode, so there is no dual-writer hazard.
+
+Stack: CherryUSB v1.2.0 device core + MSC class on the F1C's MUSB
+controller (`CONFIG_USB_MUSB_SUNXI` shifted register map, base 0x01C13000,
+IRQ 26). PHY/clock recipe in src/usbphy.c. Full-Speed for now (~800 KB/s
+to a Mac); High-Speed is a config flip (`CONFIG_USB_HS` + 512-byte MPS)
+kept as debt until FS has field mileage.

@@ -24,6 +24,14 @@ This firmware stands on prior work:
   `avi.cpp` — reference implementations studied for the AVI muxer.
 - **[linux-sunxi.org](https://linux-sunxi.org)** — Video Engine register
   documentation and the CedarX reverse-engineering effort.
+- **[CherryUSB](https://github.com/cherry-embedded/CherryUSB)** v1.2.0
+  (Apache-2.0) — USB device stack (core + MSC class + MUSB port), vendored
+  under `vendor/cherryusb/` with bare-metal config tweaks and a
+  READ CAPACITY(16) addition noted in the file headers.
+- **[lhdjply/f1c200s_library](https://github.com/lhdjply/f1c200s_library)**
+  (MIT) — USB PHY/clock bring-up recipe and MSC descriptor reference
+  (`src/usbphy.c`, parts of `src/usbmsc.c`), cross-checked against mainline
+  Linux `musb_sunxi` and `phy-sun4i-usb`.
 
 Combined work licensed **GPL-3.0-or-later**; vendored trees keep their
 original license files. Derived source files carry their origin in the
