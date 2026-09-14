@@ -39,8 +39,16 @@ with nothing but a USB cable:
   the button once the device enumerates (~1 s). The flash itself is
   unharmed — the short only blinds the BROM's probe.
 
-Host side needs [sunxi-tools](https://github.com/linux-sunxi/sunxi-tools)
-(`brew install sunxi-tools` / `apt install sunxi-tools`). Verify the link:
+Host side needs [sunxi-tools](https://github.com/linux-sunxi/sunxi-tools).
+Debian/Ubuntu: `apt install sunxi-tools`. macOS has no Homebrew formula;
+build from source (needs `brew install libusb pkgconf`):
+
+```sh
+git clone --depth 1 https://github.com/linux-sunxi/sunxi-tools.git
+cd sunxi-tools && make tools && make install-tools PREFIX=/opt/homebrew
+```
+
+Verify the link:
 
 ```sh
 sunxi-fel ver        # expect: AWUSBFEX soc=00001663 (F1C100s/F1C200s)

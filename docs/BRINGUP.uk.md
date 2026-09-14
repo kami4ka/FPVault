@@ -40,8 +40,16 @@ USB-C, що живить плату, і приймає завантаження.
   у FEL; відпустіть кнопку, щойно пристрій з'явився (~1 с). Сама
   флеш-пам'ять неушкоджена — коротке замикання лише «сліпить» пробу BROM.
 
-На хості потрібні [sunxi-tools](https://github.com/linux-sunxi/sunxi-tools)
-(`brew install sunxi-tools` / `apt install sunxi-tools`). Перевірка зв'язку:
+На хості потрібні [sunxi-tools](https://github.com/linux-sunxi/sunxi-tools).
+Debian/Ubuntu: `apt install sunxi-tools`. У Homebrew формули немає;
+на macOS збирайте з вихідників (потрібно `brew install libusb pkgconf`):
+
+```sh
+git clone --depth 1 https://github.com/linux-sunxi/sunxi-tools.git
+cd sunxi-tools && make tools && make install-tools PREFIX=/opt/homebrew
+```
+
+Перевірка зв'язку:
 
 ```sh
 sunxi-fel ver        # очікуйте: AWUSBFEX soc=00001663 (F1C100s/F1C200s)
