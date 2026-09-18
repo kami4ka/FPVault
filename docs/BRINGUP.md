@@ -106,6 +106,12 @@ ladder is in the plan; the decision lands before anything else is invested.
 
 - **Silent console**: board unpowered, or U-Boot never started (SPI-NOR
   erased?). FEL over USB is the recovery path (sunxi-tools).
+- **No FEL either, on a freshly assembled board** (no USB device at all,
+  rails and crystal fine, every IC warm): suspect the RESET pin's solder
+  joint at the QFN before the chip. Measured at the pull-up or the reset
+  button the net reads 3.3 V while pin 70 itself floats, so the SoC never
+  leaves reset. One touch of the iron on that pin fixed the first v2 board
+  after two days of chasing power rails and swapping SoCs.
 - **loader.py "no '=>' prompt"**: something else is running — press reset,
   or if a previous DVR/passthru build is live, its `r` command reboots to
   U-Boot.
