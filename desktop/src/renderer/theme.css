@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+
+/* FPVault's palette, taken from the assets that already exist:
+ * docs/img/logo.png for the brand colours, docs/img/pipeline.svg for the
+ * status accents (Tailwind 600 tokens, so they drop straight in).
+ * Flat fills, no gradients, no shadows, 10px corners — the same rules the
+ * hand-written SVGs in docs/img follow. */
+@theme {
+  --color-ink: #1e252d;
+  --color-brand: #0ea3be;
+  --color-record: #eb4a1a;
+  --color-muted: #8b949e;
+
+  --color-ok: #059669;
+  --color-warn: #d97706;
+  --color-busy: #7c3aed;
+  --color-info: #2563eb;
+  --color-slate: #475569;
+
+  --color-surface: #ffffff;
+  --color-canvas: #f7f8f9;
+  --color-line: #e3e7ea;
+
+  --radius-card: 10px;
+
+  --font-sans: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-surface: #1a2027;
+    --color-canvas: #12171c;
+    --color-line: #2b333c;
+    --color-ink: #e6edf3;
+    --color-muted: #7d8590;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The inset traffic lights on macOS need a drag region; everything
+ * interactive inside it opts back out. */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.dot-live {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot-live {
+    animation: none;
+  }
+}

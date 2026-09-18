@@ -8,3 +8,10 @@ __pycache__/
 *.pyc
 .DS_Store
 local/
+
+# --- desktop/ (Electron companion app) ---
+node_modules/
+desktop/out/
+desktop/dist/
+desktop/resources/bin/
+desktop/test/fixtures/*.avi

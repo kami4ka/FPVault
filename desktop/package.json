@@ -1,0 +1,36 @@
+{
+  "name": "fpvault-desktop",
+  "version": "0.1.0",
+  "description": "FPVault Desktop — companion app for the FPVault FPV DVR board",
+  "license": "GPL-3.0-or-later",
+  "author": "Oleg Kulyk",
+  "homepage": "https://github.com/kami4ka/FPVault",
+  "main": "./out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "fetch-binaries": "node scripts/fetch-binaries.mjs",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.7.0",
+    "vite": "^7.0.0",
+    "vitest": "^5.0.1"
+  }
+}

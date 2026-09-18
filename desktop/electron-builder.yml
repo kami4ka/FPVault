@@ -1,0 +1,56 @@
+appId: com.fpvault.desktop
+productName: FPVault Desktop
+copyright: GPL-3.0-or-later
+
+directories:
+  output: dist
+  buildResources: resources
+
+files:
+  - out/**
+  - package.json
+
+# Bundled tools must live outside the asar: an executable cannot be run from
+# inside an archive, and macOS cannot sign one there either.
+asarUnpack:
+  - resources/bin/**
+
+extraResources:
+  - from: resources/bin/${platform}-${arch}
+    to: bin
+    filter: ['**/*']
+
+mac:
+  category: public.app-category.utilities
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  # Every bundled executable is signed with the app's identity; without this
+  # notarization rejects the bundle.
+  binaries:
+    - resources/bin/ffmpeg
+    - resources/bin/ffprobe
+    - resources/bin/sunxi-fel
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+
+linux:
+  category: Utility
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+publish: null
