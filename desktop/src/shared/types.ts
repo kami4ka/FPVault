@@ -177,6 +177,14 @@ export interface LibraryClipView {
   gapUncertain: boolean
 }
 
+export interface ClipMedia {
+  frames: number
+  width: number
+  height: number
+  fps: number
+  durationSec: number
+}
+
 export interface Api {
   device: {
     get(): Promise<DeviceState>
@@ -192,6 +200,12 @@ export interface Api {
     setSessionStart(sessionId: string, startUtc: string | null): Promise<LibraryView>
     chooseRoot(): Promise<LibraryView>
     reveal(file: string): Promise<void>
+  }
+  clip: {
+    /** Seek table and geometry, read once when a clip is opened. */
+    media(clipId: string): Promise<ClipMedia | null>
+    /** One frame as JPEG bytes. Empty means a dropout: hold the last image. */
+    frame(clipId: string, index: number): Promise<Uint8Array>
   }
   jobs: {
     list(): Promise<JobState[]>

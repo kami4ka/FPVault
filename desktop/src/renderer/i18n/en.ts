@@ -67,6 +67,7 @@ export const en = {
   libraryScreen: {
     empty: 'Nothing imported yet',
     reveal: 'Show',
+    playHint: 'Play this clip',
     setStart: 'Set start time',
     changeStart: 'Change start time',
     recovered: (saved: string) => `${saved} of preallocation left behind`,
@@ -77,6 +78,14 @@ export const en = {
       'The board has no clock, so every clip on the card is stamped 2020-01-01. Times here come from the session start you set plus each clip\'s real duration. A ~ marks a gap that is a minimum rather than a measurement.'
   }
 ,
+  player: {
+    close: 'Close',
+    play: 'Play',
+    pause: 'Pause',
+    scrub: 'Scrub through the clip',
+    dropout: 'dropped frame — the camera signal was lost here',
+    frameOf: (i: number, n: number) => `frame ${i} of ${n}`
+  },
   common: {
     rescan: 'Rescan',
     unknown: 'unknown'

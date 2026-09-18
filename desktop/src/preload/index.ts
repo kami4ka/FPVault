@@ -30,6 +30,10 @@ const api: Api = {
     chooseRoot: () => ipcRenderer.invoke('library:chooseRoot'),
     reveal: (file) => ipcRenderer.invoke('library:reveal', file)
   },
+  clip: {
+    media: (clipId) => ipcRenderer.invoke('clip:media', clipId),
+    frame: (clipId, index) => ipcRenderer.invoke('clip:frame', clipId, index)
+  },
   jobs: {
     list: () => ipcRenderer.invoke('jobs:list'),
     onChange: (fn) => on<JobState>('jobs:change', fn),

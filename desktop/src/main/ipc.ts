@@ -6,6 +6,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join, resolve, sep } from 'node:path'
 import type { LibraryClipView, LibraryView } from '@shared/types'
 import type { DeviceWatcher } from './device/watcher.js'
+import { frameTable, readFrame, type FrameTable } from '@shared/avi/frames'
 import { scanCard, type CardSession } from './library/scanner.js'
 import { Store } from './library/store.js'
 import { inferSessionTimes, sessionLabel } from './library/timestamps.js'
@@ -119,6 +120,44 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
   ipcMain.handle('library:reveal', (_e, file: string) => {
     const full = assertUnder(join(store.root, file), [store.root])
     shell.showItemInFolder(full)
+  })
+
+  /* ---- clip media ----
+   * A clip's seek table is cached: opening the player then scrubbing it
+   * would otherwise re-read the index on every single frame. */
+  const tables = new Map<string, { path: string; table: FrameTable }>()
+
+  const tableFor = async (clipId: string) => {
+    const hit = tables.get(clipId)
+    if (hit) return hit
+    const clip = store.snapshot().clips[clipId]
+    if (!clip) return null
+    const path = assertUnder(join(store.root, clip.file), [store.root])
+    const table = await frameTable(path)
+    if (!table) return null
+    const entry = { path, table }
+    tables.set(clipId, entry)
+    return entry
+  }
+
+  ipcMain.handle('clip:media', async (_e, clipId: string) => {
+    const entry = await tableFor(clipId)
+    if (!entry) return null
+    const { table } = entry
+    const fps = table.scale ? table.rate / table.scale : 0
+    return {
+      frames: table.frames.length,
+      width: table.width,
+      height: table.height,
+      fps,
+      durationSec: fps ? table.frames.length / fps : 0
+    }
+  })
+
+  ipcMain.handle('clip:frame', async (_e, clipId: string, index: number) => {
+    const entry = await tableFor(clipId)
+    if (!entry) return new Uint8Array()
+    return new Uint8Array(await readFrame(entry.path, entry.table, index))
   })
 
   /* ---- jobs ---- */

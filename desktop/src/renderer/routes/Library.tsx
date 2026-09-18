@@ -9,6 +9,8 @@
  * measurement are marked as such.
  */
 import { useState } from 'react'
+import { ClipPlayer } from '../components/ClipPlayer.js'
+import { ClipThumb } from '../components/ClipThumb.js'
 import type { LibraryClipView, LibraryView } from '@shared/types'
 import { bytes, clockTime, duration, toLocalInput } from '../components/format.js'
 import type { Strings } from '../i18n/index.js'
@@ -19,7 +21,15 @@ const HEALTH_COLOR: Record<LibraryClipView['health'], string> = {
   damaged: 'var(--color-record)'
 }
 
-function ClipRow({ clip, s }: { clip: LibraryClipView; s: Strings }) {
+function ClipRow({
+  clip,
+  s,
+  onPlay
+}: {
+  clip: LibraryClipView
+  s: Strings
+  onPlay: () => void
+}) {
   const saved = clip.sourceBytes - clip.bytes
   return (
     <li className="flex items-center gap-3 border-b border-[var(--color-line)] px-4 py-2 last:border-b-0">
@@ -28,9 +38,15 @@ function ClipRow({ clip, s }: { clip: LibraryClipView; s: Strings }) {
         style={{ background: HEALTH_COLOR[clip.health] }}
         title={s.health[clip.health]}
       />
-      <span className="w-28 shrink-0 font-[family-name:var(--font-mono)] text-xs">
-        {clip.cardName}
-      </span>
+      <button
+        type="button"
+        onClick={onPlay}
+        className="flex shrink-0 items-center gap-2.5 text-left hover:text-[var(--color-brand)]"
+        title={s.libraryScreen.playHint}
+      >
+        <ClipThumb clipId={clip.id} frames={clip.frames} className="h-9 w-14" />
+        <span className="w-28 font-[family-name:var(--font-mono)] text-xs">{clip.cardName}</span>
+      </button>
       <span className="w-16 shrink-0 text-xs text-[var(--color-muted)]">
         {duration(clip.durationSec)}
       </span>
@@ -66,11 +82,13 @@ function ClipRow({ clip, s }: { clip: LibraryClipView; s: Strings }) {
 function SessionGroup({
   session,
   s,
-  onSetStart
+  onSetStart,
+  onPlay
 }: {
   session: LibraryView['sessions'][number]
   s: Strings
   onSetStart: (id: string, iso: string | null) => void
+  onPlay: (clip: LibraryClipView) => void
 }) {
   const [open, setOpen] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -120,7 +138,7 @@ function SessionGroup({
       {open && (
         <ul className="border-t border-[var(--color-line)]">
           {session.clips.map((c) => (
-            <ClipRow key={c.id} clip={c} s={s} />
+            <ClipRow key={c.id} clip={c} s={s} onPlay={() => onPlay(c)} />
           ))}
         </ul>
       )}
@@ -129,6 +147,8 @@ function SessionGroup({
 }
 
 export function Library({ library, s }: { library: LibraryView | null; s: Strings }) {
+  const [playing, setPlaying] = useState<LibraryClipView | null>(null)
+
   if (!library || !library.sessions.length)
     return (
       <div className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-line)] p-10 text-center text-sm text-[var(--color-muted)]">
@@ -146,9 +166,24 @@ export function Library({ library, s }: { library: LibraryView | null; s: String
         {library.root}
       </p>
       {library.sessions.map((session) => (
-        <SessionGroup key={session.id} session={session} s={s} onSetStart={setStart} />
+        <SessionGroup
+          key={session.id}
+          session={session}
+          s={s}
+          onSetStart={setStart}
+          onPlay={setPlaying}
+        />
       ))}
       <p className="pt-2 text-xs text-[var(--color-muted)]">{s.libraryScreen.noRtcNote}</p>
+
+      {playing && (
+        <ClipPlayer
+          clipId={playing.id}
+          name={playing.cardName}
+          s={s}
+          onClose={() => setPlaying(null)}
+        />
+      )}
     </div>
   )
 }
