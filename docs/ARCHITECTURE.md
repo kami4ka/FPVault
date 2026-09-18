@@ -104,8 +104,8 @@ That collapses the design into a boot-time fork (src/main.c):
 Stack: CherryUSB v1.2.0 device core + MSC class on the F1C's MUSB
 controller (`CONFIG_USB_MUSB_SUNXI` shifted register map, base 0x01C13000,
 IRQ 26). PHY/clock recipe in src/usbphy.c. High-Speed (`CONFIG_USB_HS`,
-512-byte bulk packets): ~2.5 MB/s to a Mac, up from ~800 KB/s at
-Full-Speed. The remaining ceiling is the reader path itself - the card
-runs 1-bit and each MSC read does its SD PIO inside the USB interrupt,
-serialised with the bus transfer - so a native card reader is still
-faster for bulk offload.
+512-byte bulk packets) with the card on its 4-bit bus: ~7 MB/s to a Mac,
+up from ~800 KB/s at Full-Speed/1-bit. The remaining ceiling is the MSC
+design - each read does its SD PIO inside the USB interrupt, serialised
+with the bus transfer - so a native card reader is still faster for bulk
+offload.

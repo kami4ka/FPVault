@@ -22,7 +22,10 @@
 
 static sdcard_t card;
 static DSTATUS dstat = STA_NOINIT;
-static uint32_t want_width = MMC_BUS_WIDTH_1; /* start on the proven width */
+/* 4-bit by default since 2026-09-18: 1-bit (~2.5 MB/s) became the ceiling
+ * of the High-Speed USB reader path. 1-bit stays reachable via ':W' for a
+ * card that misbehaves on the wide bus. */
+static uint32_t want_width = MMC_BUS_WIDTH_4;
 
 /* Raw access for the M2 bench harness (boot-sector scrub, benchmarks). */
 sdcard_t* disk_card(void) {
@@ -35,10 +38,8 @@ int disk_raw_init(void) {
     return (disk_initialize(0) == 0) ? 0 : -1;
 }
 
-/* Runtime width selection: the first mount stays 1-bit (the only mode ever
- * proven on this board) so the boot-region scrub cannot be blocked by a
- * 4-bit bring-up problem; the bench then switches and remounts. Returns
- * the width that will be used on the next disk_initialize. */
+/* Runtime width selection for the bench (':W' toggles and remounts).
+ * Returns the width that will be used on the next disk_initialize. */
 uint32_t disk_toggle_width(void) {
     want_width = (want_width == MMC_BUS_WIDTH_1) ? MMC_BUS_WIDTH_4 : MMC_BUS_WIDTH_1;
     dstat = STA_NOINIT;
