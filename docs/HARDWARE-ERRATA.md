@@ -72,3 +72,24 @@ The in-line ESP32 USB-serial bridge reboots on every host port open and
 sprays noise bytes into the console (this is why console commands require
 the ':' prefix). A future board should route UART0 to its own USB-serial
 directly.
+
+## v2 board (analog bypass) — bring-up findings
+
+- **TVD input termination goes on the source side of the coupling cap.**
+  As drawn, the 75 Ω shunt (R31) sat between C33 and the TVD pin, tying
+  the pin to 0 V DC. The decoder biases its input through a weak internal
+  clamp that cannot hold against 75 Ω to ground, so the video swung
+  around ground, the sync tips fell below the ADC's range, and the TVD
+  reported no-signal on a textbook 1 Vpp waveform at the pin. Moving R31
+  to the R33/C33 junction (same divider, same 1 Vpp, pin side floating)
+  locked instantly: status 0x0E, 30 fps, first v2 recording.
+- **Reflow the QFN before doubting anything else.** The first v2 board
+  spent two days "dead" - no FEL, rails and crystal fine, every IC warm,
+  the SoC swapped twice - with the RESET pin floating at the QFN side
+  while the net measured 3.3 V at the button. See BRINGUP troubleshooting.
+- Confirmed good as designed: USB-C straight to the SoC with 5.1k CC
+  pull-downs enumerates in FEL and as the FPVault card reader on the
+  first try once the chip runs; the THS7374 + TS5A3153 bypass passes the
+  camera to CVBS_OUT with PE4 at its pull-down default and no firmware
+  involvement; the amp's 2 Vpp output through the 75/75 divider gives
+  the decoder 1 Vpp.

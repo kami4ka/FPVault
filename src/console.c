@@ -29,6 +29,9 @@ static void cmd_state(void) {
     printf("  capture %08x  bsring %08x x%lu slots  idx %08x\r\n",
            (unsigned)CAPTURE_BASE, (unsigned)BSRING_BASE,
            (unsigned long)BSRING_SLOTS, (unsigned)IDX_BASE);
+    printf("  tvd status %08lx  signal %s  std %d  frames %lu\r\n",
+           (unsigned long)capture_state(), capture_signal_ok() ? "ok" : "NO",
+           (int)capture_standard(), (unsigned long)capture_frames());
 }
 
 static void cmd_reset(void) {
