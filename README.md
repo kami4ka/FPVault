@@ -53,7 +53,7 @@ Early bring-up. Milestones:
 - [x] M8 — standalone SPI-NOR boot: cold power → recording in ~5 s
       (U-Boot with baked-in bootcmd at NOR 0, firmware at NOR 0x100000)
 - [x] M9 — USB mass storage: connect to a computer, the card mounts
-      (CherryUSB device stack on the MUSB controller, Full-Speed for now)
+      (CherryUSB device stack on the MUSB controller, USB 2.0 High-Speed)
 
 Power the board with a card inserted and it records — no host, no
 commands.

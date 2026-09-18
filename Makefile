@@ -40,6 +40,11 @@ OPT = -O2
 # `loady 0x80000000` + `go 0x80000000` work.
 DEFS += -DLOAD_HEADER
 
+# USB device runs at High Speed (480 Mbit/s, 512-byte bulk packets). The
+# musb port sets HSENAB and sizes the FIFOs from the descriptor when this
+# is defined; without it the card reader is capped at Full Speed ~800 KB/s.
+DEFS += -DCONFIG_USB_HS
+
 # Base of the capture planes, given to BOTH the C and the link script from one
 # variable so they cannot drift. The -D alone does NOT satisfy the script's
 # ASSERT - that needs the --defsym, evaluated by the linker.
