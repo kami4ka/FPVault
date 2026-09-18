@@ -2,6 +2,7 @@
 export const en = {
   nav: {
     device: 'Device',
+    import: 'Import',
     library: 'Library',
     firmware: 'Firmware',
     settings: 'Settings'
@@ -50,6 +51,32 @@ export const en = {
     timestamps: { title: 'Timestamps', body: 'Give clips their real date and time' },
     update: { title: 'Update firmware', body: 'Fetch the latest release and flash it' }
   },
+  health: {
+    clean: 'Closed cleanly',
+    crashCut: 'Cut by a power loss, repaired on import',
+    damaged: 'Structurally damaged'
+  },
+  importScreen: {
+    scanning: 'Reading the card',
+    empty: 'No clips on this card',
+    transfers: 'Transfers',
+    start: (n: number) => (n === 1 ? 'Import 1 session' : `Import ${n} sessions`),
+    reclaimNote: (n: number) =>
+      `${n} ${n === 1 ? 'clip is' : 'clips are'} a 200 MB preallocation holding much less. Only the real part is read.`
+  },
+  libraryScreen: {
+    empty: 'Nothing imported yet',
+    reveal: 'Show',
+    setStart: 'Set start time',
+    changeStart: 'Change start time',
+    recovered: (saved: string) => `${saved} of preallocation left behind`,
+    tornDropped: 'torn final frame dropped',
+    repaired: (n: number) => `${n} repaired`,
+    gapUncertain: 'The gap before this clip is a minimum, not a measurement',
+    noRtcNote:
+      'The board has no clock, so every clip on the card is stamped 2020-01-01. Times here come from the session start you set plus each clip\'s real duration. A ~ marks a gap that is a minimum rather than a measurement.'
+  }
+,
   common: {
     rescan: 'Rescan',
     unknown: 'unknown'

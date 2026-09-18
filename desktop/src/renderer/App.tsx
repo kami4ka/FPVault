@@ -1,8 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { JobState, LibraryView } from '@shared/types'
 import { DeviceRail, type Route } from './components/DeviceRail.js'
 import { StatusCard } from './components/StatusCard.js'
 import { TaskTiles } from './components/TaskTiles.js'
+import { Import } from './routes/Import.js'
+import { Library } from './routes/Library.js'
 import { detectLang, setLang as persistLang, strings, type Lang } from './i18n/index.js'
 import { useDevice } from './useDevice.js'
 
@@ -19,6 +22,26 @@ export function App() {
   const [lang, setLangState] = useState<Lang>(() => detectLang())
   const { state, rescan, busy } = useDevice()
   const s = useMemo(() => strings(lang), [lang])
+
+  const [library, setLibrary] = useState<LibraryView | null>(null)
+  const [jobs, setJobs] = useState<JobState[]>([])
+
+  useEffect(() => {
+    void window.fpvault.library.get().then(setLibrary)
+    void window.fpvault.jobs.list().then(setJobs)
+    const offLib = window.fpvault.library.onChange(setLibrary)
+    const offJob = window.fpvault.jobs.onChange((job) =>
+      setJobs((prev) => {
+        const next = prev.filter((j) => j.id !== job.id)
+        next.push(job)
+        return next
+      })
+    )
+    return () => {
+      offLib()
+      offJob()
+    }
+  }, [])
 
   const switchLang = (l: Lang) => {
     persistLang(l)
@@ -51,15 +74,20 @@ export function App() {
         <div className="mx-auto max-w-4xl px-6 pb-10">
           {route === 'device' && (
             <>
-              <StatusCard state={state} s={s} onAction={() => setRoute('library')} />
+              <StatusCard state={state} s={s} onAction={() => setRoute('import')} />
               <TaskTiles
                 state={state}
                 s={s}
-                onOpen={(task) => setRoute(task === 'update' ? 'firmware' : 'library')}
+                onOpen={(task) =>
+                  setRoute(
+                    task === 'update' ? 'firmware' : task === 'import' ? 'import' : 'library'
+                  )
+                }
               />
             </>
           )}
-          {route === 'library' && <Placeholder title={s.nav.library} />}
+          {route === 'import' && <Import device={state} jobs={jobs} s={s} />}
+          {route === 'library' && <Library library={library} s={s} />}
           {route === 'firmware' && <Placeholder title={s.nav.firmware} />}
           {route === 'settings' && <Placeholder title={s.nav.settings} />}
         </div>

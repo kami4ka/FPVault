@@ -6,7 +6,7 @@
 import type { DeviceState } from '@shared/types'
 import type { Lang, Strings } from '../i18n/index.js'
 
-export type Route = 'device' | 'library' | 'firmware' | 'settings'
+export type Route = 'device' | 'import' | 'library' | 'firmware' | 'settings'
 
 const DOT: Record<DeviceState['kind'], string> = {
   absent: 'var(--color-muted)',
@@ -86,6 +86,7 @@ export function DeviceRail({
           onClick={() => setRoute('device')}
           dot={DOT[state.kind]}
         />
+        <Item label={s.nav.import} active={route === 'import'} onClick={() => setRoute('import')} />
         <Item label={s.nav.library} active={route === 'library'} onClick={() => setRoute('library')} />
         <Item
           label={s.nav.firmware}

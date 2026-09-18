@@ -114,11 +114,90 @@ export interface FrameIndex {
 
 /* ---- IPC ---------------------------------------------------------------- */
 
+/** Mirrors main/jobs/queue.ts; duplicated here to keep this file import-free. */
+export interface JobState {
+  id: string
+  kind: 'import' | 'repair' | 'join'
+  label: string
+  phase: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
+  progress: number | null
+  detail: string
+  error?: string
+}
+
+export interface CardClipInfo {
+  path: string
+  name: string
+  dcfIndex: number
+  bytes: number
+  looksCrashCut: boolean
+}
+
+export interface CardSessionInfo {
+  dcfDir: number
+  dirName: string
+  clips: CardClipInfo[]
+  bytes: number
+}
+
+export interface CardContentsInfo {
+  volumePath: string
+  sessions: CardSessionInfo[]
+  totalClips: number
+  totalBytes: number
+  reclaimableBytes: number
+}
+
+export interface LibraryView {
+  root: string
+  sessions: {
+    id: string
+    dcfDir: number
+    label: string
+    startUtc: string | null
+    clips: LibraryClipView[]
+    durationSec: number
+    bytes: number
+  }[]
+}
+
+export interface LibraryClipView {
+  id: string
+  dcfIndex: number
+  cardName: string
+  file: string
+  bytes: number
+  sourceBytes: number
+  health: ClipHealth
+  frames: number
+  drops: number
+  droppedTornFrame: boolean
+  durationSec: number
+  startUtc: string | null
+  gapUncertain: boolean
+}
+
 export interface Api {
   device: {
     get(): Promise<DeviceState>
     onChange(fn: (s: DeviceState) => void): () => void
     rescan(): Promise<DeviceState>
+  }
+  card: {
+    scan(volumePath: string): Promise<CardContentsInfo>
+  }
+  library: {
+    get(): Promise<LibraryView>
+    onChange(fn: (l: LibraryView) => void): () => void
+    setSessionStart(sessionId: string, startUtc: string | null): Promise<LibraryView>
+    chooseRoot(): Promise<LibraryView>
+    reveal(file: string): Promise<void>
+  }
+  jobs: {
+    list(): Promise<JobState[]>
+    onChange(fn: (j: JobState) => void): () => void
+    importSessions(volumePath: string, dcfDirs: number[]): Promise<string[]>
+    cancel(id: string): Promise<void>
   }
   app: {
     versions(): Promise<{ app: string; electron: string; node: string; chrome: string }>

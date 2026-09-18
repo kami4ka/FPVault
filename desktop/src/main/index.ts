@@ -2,10 +2,11 @@
  *
  * Main process: one window, one device watcher, a narrow IPC surface.
  */
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DeviceWatcher } from './device/watcher.js'
+import { registerIpc } from './ipc.js'
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
@@ -47,23 +48,8 @@ function createWindow(): BrowserWindow {
   return w
 }
 
-function registerIpc() {
-  ipcMain.handle('device:get', () => watcher.state)
-  ipcMain.handle('device:rescan', () => watcher.rescan())
-  ipcMain.handle('app:versions', () => ({
-    app: app.getVersion(),
-    electron: process.versions.electron,
-    node: process.versions.node,
-    chrome: process.versions.chrome
-  }))
-
-  watcher.on('change', (state) => {
-    if (win && !win.isDestroyed()) win.webContents.send('device:change', state)
-  })
-}
-
 void app.whenReady().then(async () => {
-  registerIpc()
+  await registerIpc(watcher)
   win = createWindow()
   await watcher.start()
   /* The window may have finished loading before the first scan completed. */
