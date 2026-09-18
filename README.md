@@ -29,6 +29,9 @@ core only orchestrates.
   card mounts as USB mass storage ("FPVault SD Card"); no card removal, no
   extra files on the card. Powered by anything that is not a computer
   (charger, FC 5 V), it records instead.
+- **Firmware update over the same USB cable** — the board also shows up as
+  a standard DFU device; `dfu-util -D fpvault.bin` stages, verifies, burns
+  NOR and reboots. No buttons, no serial adapter, nothing on the card.
 
 ## Status
 
@@ -96,6 +99,7 @@ Needs `arm-none-eabi-gcc` (tested with 14.2) and GNU make.
 ```sh
 make            # build/fpvault.bin
 make deploy     # send to a board sitting at the U-Boot prompt (YMODEM)
+make dfu        # update a running board over USB (dfu-util)
 ```
 
 The dev flow expects U-Boot on the board's SPI-NOR: `loady 0x80000000`,

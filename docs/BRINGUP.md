@@ -25,6 +25,26 @@ Console commands (single characters): `s` state, `r` watchdog reset,
 `v` VE info, `q` cycle JPEG quality 50/75/90, `m` cycle ISP input format,
 `J` encode test pattern (timing only), `j` encode + base64 JPEG dump.
 
+## Firmware update over USB — DFU (the normal way)
+
+A board that already runs FPVault updates itself over the same USB-C it
+uses as a card reader. It enumerates as a composite device: the mass-
+storage interface plus a DFU 1.1 interface named "FPVault firmware".
+Host side needs [dfu-util](https://dfu-util.sourceforge.net/)
+(`brew install dfu-util` / `apt install dfu-util`, Windows builds exist):
+
+```sh
+dfu-util -D fpvault.bin        # or: make dfu
+```
+
+What happens: the image is staged in DRAM, checked (size, load header),
+burnt to the NOR firmware slot at 1 MB, read back and compared, and only
+then does the board reboot into it — `[boot] previous reset: requested`
+on the console. Nothing touches the flash until the whole image has
+arrived, so a cable pull mid-transfer changes nothing. The second or so
+of the burn itself is the only time a power cut can hurt; FEL below is
+the way back if it does.
+
 ## Flashing over USB — FEL (blank or bricked board, no UART)
 
 FEL is the recovery mode inside the SoC's mask ROM: when the BROM finds no

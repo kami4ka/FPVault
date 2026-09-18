@@ -23,6 +23,7 @@
 #include "pipeline.h"
 #include "fclink.h"
 #include "usbmsc.h"
+#include "usbdfu.h"
 #include "arm32.h"
 #include "f1c100s_gpio.h"
 #include "f1c100s_intc.h"
@@ -60,6 +61,9 @@ int main(void) {
                    "at uptime %lus\r\n",
                    (unsigned long)bc[3], (unsigned long)bc[1],
                    (unsigned long)bc[2], (unsigned long)bc[5]);
+        else if(bc[4] == BC_ALIVE_MAGIC && bc[6] == BC_REBOOT_MAGIC)
+            printf("[boot] previous reset: requested (console or firmware "
+                   "update) at uptime %lus\r\n", (unsigned long)bc[5]);
         else if(bc[4] == BC_ALIVE_MAGIC)
             printf("[boot] previous reset: warm, no crash mark, heartbeat "
                    "at uptime %lus (hang+watchdog or supply dip)\r\n",
@@ -68,6 +72,7 @@ int main(void) {
             printf("[boot] cold power-on (no breadcrumbs)\r\n");
         bc[0] = 0;
         bc[5] = 0;
+        bc[6] = 0;
         bc[4] = BC_ALIVE_MAGIC;
     }
 
@@ -128,6 +133,7 @@ int main(void) {
             /* Drain encoded frames to the recorder (may block on SD -
              * the IRQ pipeline keeps capturing regardless). */
             pipeline_consume();
+            usbdfu_poll();
 
             /* LED: 8-bit state pattern, one bit per 125 ms. */
             if((uint32_t)(t_led - tim_get_cnt(TIM0)) >= TICKS_PER_SEC / 8u) {

@@ -50,9 +50,14 @@
  * true power loss (DRAM garbage). 0x8380_0000 sits in the free window,
  * clear of everything above AND of U-Boot, which relocates itself to the
  * top megabytes of DRAM. */
+/* USB firmware update stages the incoming image here (256 KB, the NOR
+ * slot size) before anything touches the flash. */
+#define DFU_STAGE_BASE    0x83400000u
+
 #define BREADCRUMB_BASE   0x83800000u
 #define BC_CRASH_MAGIC    0xDEADFA11u
 #define BC_ALIVE_MAGIC    0xA11FE001u
+#define BC_REBOOT_MAGIC   0x5EB0075Eu  /* bc[6]: reset was asked for (console :r, DFU) */
 
 #define CAP_PLANE_SPACING 0x400000u              /* 4 MB */
 #define CAP_NBUF          3

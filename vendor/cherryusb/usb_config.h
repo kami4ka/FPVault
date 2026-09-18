@@ -39,7 +39,9 @@
 #define CONFIG_USBDEV_MAX_BUS 1    // for now, bus num must be 1 except hpm ip
 
 /* Ep0 max transfer buffer, specially for receiving data from ep0 out */
+#ifndef CONFIG_USBDEV_REQUEST_BUFFER_LEN
 #define CONFIG_USBDEV_REQUEST_BUFFER_LEN 256
+#endif
 
 /* Setup packet log for debug */
 // #define CONFIG_USBDEV_SETUP_LOG_PRINT

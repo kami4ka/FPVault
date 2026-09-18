@@ -20,6 +20,7 @@
 #include "capture.h"
 #include "recorder.h"
 #include "pipeline.h"
+#include "spinor.h"
 
 extern uint32_t sys_uptime_s(void);
 
@@ -36,6 +37,7 @@ static void cmd_state(void) {
 
 static void cmd_reset(void) {
     printf("resetting...\r\n");
+    ((volatile uint32_t*)BREADCRUMB_BASE)[6] = BC_REBOOT_MAGIC;
     wdg_init(WDG_MODE_RESET, WDG_INTV_500MS);
     while(1)
         ;
@@ -100,6 +102,17 @@ static void dispatch(char c) {
     case '6':
     case '7': enctest_set_fmt((uint8_t)(c - '0')); break;
     case 'v': enctest_info(); break;
+    case 'n': { /* NOR self-test: JEDEC id + first 4 KB of the fw slot vs RAM */
+        static uint8_t rb[4096];
+        uint32_t id = spinor_read_id();
+        spinor_read(SPINOR_FW_OFF, rb, sizeof rb);
+        int same = 1;
+        for(uint32_t i = 0; i < sizeof rb; i++)
+            if(rb[i] != ((volatile uint8_t*)0x80000000)[i]) { same = 0; break; }
+        printf("[nor] jedec %06lx, fw slot head %s RAM image\r\n",
+               (unsigned long)id, same ? "matches" : "DIFFERS from");
+        break;
+    }
     default:
         printf("? s state, r reset | VE: j enc+dump, J enc, q quality, m fmt, v info\r\n");
         break;

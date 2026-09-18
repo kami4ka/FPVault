@@ -109,3 +109,19 @@ up from ~800 KB/s at Full-Speed/1-bit. The remaining ceiling is the MSC
 design - each read does its SD PIO inside the USB interrupt, serialised
 with the bus transfer - so a native card reader is still faster for bulk
 offload.
+
+## Firmware update (DFU)
+
+A second interface in the same USB configuration: DFU 1.1 in download
+mode (src/usbdfu.c, ~150 lines, the plain dialect dfu-util speaks -
+not ST's DfuSe). Blocks of 4 KB arrive as EP0 control writes and are
+copied to a 256 KB staging area at 0x8340_0000; the USB interrupt never
+touches flash. The main loop (usbdfu_poll) validates the image - size
+within the 256 KB slot U-Boot reads, LOAD_HEADER branch at offset 0 -
+then erases, programs, reads back and compares the NOR slot at 1 MB
+through src/spinor.c (a polled SPI0 master for the W25Q128, the first
+time this firmware writes its own NOR), holds the reboot until the host
+has read dfuMANIFEST-WAIT-RESET so dfu-util exits clean, and resets via
+the watchdog with a "requested reboot" breadcrumb. Port fix that made it
+work: the musb EP0 OUT data stage only completed on a short packet,
+which a 4096-byte block never produces.

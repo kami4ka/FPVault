@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include "board.h"
 #include "usbmsc.h"
+#include "usbdfu.h"
+#include "spinor.h"
 #include "usbphy.h"
 #include "usbd_core.h"
 #include "usbd_msc.h"
@@ -36,12 +38,12 @@
 #define USBD_PID 0xF1C2
 #define USBD_MAX_POWER 250 /* mA */
 #define USBD_LANGID_STRING 1033
-#define USB_CONFIG_SIZE (9 + MSC_DESCRIPTOR_LEN)
+#define USB_CONFIG_SIZE (9 + MSC_DESCRIPTOR_LEN + DFU_DESCRIPTOR_LEN)
 
 extern sdcard_t* disk_card(void);
 extern void USBD_IRQHandler(uint8_t busid);
 
-static struct usbd_interface intf0;
+static struct usbd_interface intf0, intf1;
 static volatile uint8_t host_present = 0;
 static volatile uint8_t card_ready = 0;
 static volatile uint32_t rd_sectors = 0, wr_sectors = 0;
@@ -66,8 +68,9 @@ void usb_dc_low_level_init(void) {
 /* clang-format off */
 static const uint8_t msc_descriptor[] = {
     USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0x00, 0x00, 0x00, USBD_VID, USBD_PID, 0x0100, 0x01),
-    USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x01, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
+    USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     MSC_DESCRIPTOR_INIT(0x00, MSC_OUT_EP, MSC_IN_EP, MSC_MAX_MPS, 0x02),
+    DFU_DESCRIPTOR_INIT(0x01, 0x04),
     /* string0: language */
     USB_LANGID_INIT(USBD_LANGID_STRING),
     /* string1: manufacturer "FPVault" */
@@ -79,6 +82,10 @@ static const uint8_t msc_descriptor[] = {
     /* string3: serial "00000001" */
     0x12, USB_DESCRIPTOR_TYPE_STRING,
     '0',0, '0',0, '0',0, '0',0, '0',0, '0',0, '0',0, '1',0,
+    /* string4: DFU interface "FPVault firmware" */
+    0x22, USB_DESCRIPTOR_TYPE_STRING,
+    'F',0, 'P',0, 'V',0, 'a',0, 'u',0, 'l',0, 't',0, ' ',0,
+    'f',0, 'i',0, 'r',0, 'm',0, 'w',0, 'a',0, 'r',0, 'e',0,
     0x00
 };
 /* clang-format on */
@@ -141,6 +148,8 @@ void usbmsc_init(void) {
 
     usbd_desc_register(0, msc_descriptor);
     usbd_add_interface(0, usbd_msc_init_intf(0, &intf0, MSC_OUT_EP, MSC_IN_EP));
+    usbd_add_interface(0, usbdfu_init_intf(&intf1));
+    spinor_init();
     usbd_initialize(0, USBD_BASE, usbd_event_handler);
     printf("[usb] device mode up (MSC, %s)\r\n",
            MSC_MAX_MPS == 512 ? "HS" : "FS");

@@ -23,6 +23,7 @@ SRCS += src/main.c src/system.c src/exception.c src/console.c src/capture.c \
         src/avi.c src/dcf.c src/runcam.c \
         src/sdc.c src/sdcard.c src/diskio.c src/sdtest.c src/recorder.c \
         src/pipeline.c src/fclink.c src/usbmsc.c src/usbphy.c \
+        src/usbdfu.c src/spinor.c \
         vendor/cherryusb/core/usbd_core.c \
         vendor/cherryusb/class/msc/usbd_msc.c \
         vendor/cherryusb/port/usb_dc_musb.c \
@@ -44,6 +45,8 @@ DEFS += -DLOAD_HEADER
 # musb port sets HSENAB and sizes the FIFOs from the descriptor when this
 # is defined; without it the card reader is capped at Full Speed ~800 KB/s.
 DEFS += -DCONFIG_USB_HS
+# EP0 request buffer = one DFU transfer block (usbdfu.h DFU_XFER_SIZE).
+DEFS += -DCONFIG_USBDEV_REQUEST_BUFFER_LEN=4096
 
 # Base of the capture planes, given to BOTH the C and the link script from one
 # variable so they cannot drift. The -D alone does NOT satisfy the script's
@@ -74,4 +77,10 @@ PORT ?= /dev/cu.usbserial-0001
 deploy: $(BIN)
 	python3 tools/loader.py $(PORT) $(BIN)
 
-.PHONY: deploy
+# ---- firmware update over USB (DFU) ---------------------------------------
+# Board plugged into this computer in its normal card-reader mode; needs
+# dfu-util (brew/apt install dfu-util). The board burns NOR and reboots.
+dfu: $(BIN)
+	dfu-util -d 34b7:f1c2 -a 0 -D $(BIN)
+
+.PHONY: deploy dfu
