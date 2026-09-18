@@ -89,6 +89,33 @@ them up. A synthesised fixture can imitate a truncated file, but only a real
 one has real prior-cluster garbage after the last frame, which is the
 interesting adversarial input for the chunk walker.
 
+## Bundled tools
+
+`npm run fetch-binaries` downloads the executables named in
+`resources/binaries.lock.json` into `resources/bin/<platform>-<arch>/` and
+verifies each one against a pinned sha256. They are not committed: four
+platforms of ffmpeg is ~250 MB, which has no business in a firmware repo.
+
+Only **ffmpeg** is bundled today, and only the MP4 export uses it. Import,
+repair, join and playback are pure TypeScript, so a missing ffmpeg costs one
+optional feature rather than breaking the app.
+
+## Join and export
+
+Two ways out of the library:
+
+- **Join** is lossless and needs no ffmpeg. Every segment shares a geometry
+  and a timebase and every frame is an independent JPEG, so joining is one
+  header, each segment's frames copied byte for byte, and one rebuilt index.
+  Measured on a real 14-clip session: 2.22 GB and 123,379 frames in 20
+  seconds, 112 MB/s, and the result passes `tools/checkavi.py` with no
+  warnings. AVI indexes are 32-bit, so a joined file caps at 4 GB — about 95
+  minutes; past that the app says so instead of writing something broken.
+- **Export MP4** re-encodes to H.264 for sharing, roughly a tenth the size.
+  It runs the concat demuxer over the *repaired* library copies, never the
+  card's originals, because the demuxer needs a real index and an
+  unfinalised clip would feed ffmpeg 200 MB of old cluster data.
+
 ## Licence
 
 GPL-3.0-or-later, like the firmware. Bundled tools keep their own licences;

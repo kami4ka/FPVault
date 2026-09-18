@@ -11,7 +11,7 @@
 import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 
-export type JobKind = 'import' | 'repair' | 'join'
+export type JobKind = 'import' | 'repair' | 'join' | 'export'
 export type JobPhase = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
 
 export interface JobState {

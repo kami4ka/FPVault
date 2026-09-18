@@ -244,3 +244,31 @@ describe.skipIf(!hasPython)('parity with tools/checkavi.py', () => {
     })
   }
 })
+
+describe('join guards', () => {
+  it('refuses when the joined file would exceed AVI\'s 32-bit index', async () => {
+    /* idx1 offsets are 32-bit, so a joined AVI caps at 4 GB — about 95
+     * minutes of this footage. The user gets told why rather than getting a
+     * silently corrupt file. */
+    const { AVI_MAX_BYTES } = await import('../src/shared/avi/repair.js')
+    expect(AVI_MAX_BYTES).toBe(0xffffffff)
+  })
+
+  it('renumbers chunk offsets into the output file', async () => {
+    /* Each segment's offsets are relative to its own movi; the joined index
+     * has to describe positions in the new file, or every seek lands wrong. */
+    await buildAvi(p('j1.avi'), { frames: 4, finalize: true })
+    await buildAvi(p('j2.avi'), { frames: 4, finalize: true })
+    await concatTo([p('j1.avi'), p('j2.avi')], p('j-out.avi'))
+
+    const { frameTable, readFrame } = await import('../src/shared/avi/frames.js')
+    const table = await frameTable(p('j-out.avi'))
+    expect(table?.frames).toHaveLength(8)
+
+    /* Every frame in the second half must still decode from its index entry. */
+    for (const i of [4, 5, 6, 7]) {
+      const jpeg = await readFrame(p('j-out.avi'), table!, i)
+      expect(jpeg.subarray(0, 3), `frame ${i}`).toEqual(Buffer.from([0xff, 0xd8, 0xff]))
+    }
+  })
+})

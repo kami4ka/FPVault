@@ -8,7 +8,7 @@
  * started, and clips whose preceding gap is a floor rather than a
  * measurement are marked as such.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ClipPlayer } from '../components/ClipPlayer.js'
 import { ClipThumb } from '../components/ClipThumb.js'
 import type { LibraryClipView, LibraryView } from '@shared/types'
@@ -83,12 +83,14 @@ function SessionGroup({
   session,
   s,
   onSetStart,
-  onPlay
+  onPlay,
+  canExport
 }: {
   session: LibraryView['sessions'][number]
   s: Strings
   onSetStart: (id: string, iso: string | null) => void
   onPlay: (clip: LibraryClipView) => void
+  canExport: boolean
 }) {
   const [open, setOpen] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -111,6 +113,24 @@ function SessionGroup({
           {cut > 0 && ` · ${s.libraryScreen.repaired(cut)}`}
         </span>
         <span className="flex-1" />
+        <button
+          type="button"
+          onClick={() => void window.fpvault.jobs.joinSession(session.id)}
+          className="rounded px-2 py-1 text-xs text-[var(--color-busy)] hover:underline"
+          title={s.libraryScreen.joinHint}
+        >
+          {s.libraryScreen.join}
+        </button>
+        {canExport && (
+          <button
+            type="button"
+            onClick={() => void window.fpvault.jobs.exportSession(session.id)}
+            className="rounded px-2 py-1 text-xs text-[var(--color-info)] hover:underline"
+            title={s.libraryScreen.exportHint}
+          >
+            {s.libraryScreen.export}
+          </button>
+        )}
         {editing ? (
           <input
             type="datetime-local"
@@ -148,6 +168,11 @@ function SessionGroup({
 
 export function Library({ library, s }: { library: LibraryView | null; s: Strings }) {
   const [playing, setPlaying] = useState<LibraryClipView | null>(null)
+  const [canExport, setCanExport] = useState(false)
+
+  useEffect(() => {
+    void window.fpvault.app.canExport().then(setCanExport)
+  }, [])
 
   if (!library || !library.sessions.length)
     return (
@@ -172,6 +197,7 @@ export function Library({ library, s }: { library: LibraryView | null; s: String
           s={s}
           onSetStart={setStart}
           onPlay={setPlaying}
+          canExport={canExport}
         />
       ))}
       <p className="pt-2 text-xs text-[var(--color-muted)]">{s.libraryScreen.noRtcNote}</p>

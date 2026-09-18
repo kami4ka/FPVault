@@ -67,6 +67,10 @@ export const en = {
   libraryScreen: {
     empty: 'Nothing imported yet',
     reveal: 'Show',
+    join: 'Join',
+    export: 'Export MP4',
+    exportHint: 'Encode the session to H.264 for sharing, about a tenth the size',
+    joinHint: 'Merge every clip in this session into one lossless file',
     playHint: 'Play this clip',
     setStart: 'Set start time',
     changeStart: 'Change start time',
@@ -86,8 +90,16 @@ export const en = {
     dropout: 'dropped frame — the camera signal was lost here',
     frameOf: (i: number, n: number) => `frame ${i} of ${n}`
   },
+  jobPhase: {
+    queued: 'queued',
+    running: 'working',
+    done: 'done',
+    failed: 'failed',
+    cancelled: 'cancelled'
+  },
   common: {
     rescan: 'Rescan',
+    cancel: 'Cancel',
     unknown: 'unknown'
   }
 }

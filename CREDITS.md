@@ -35,6 +35,32 @@ This firmware stands on prior work:
   (`src/usbphy.c`, parts of `src/usbmsc.c`), cross-checked against mainline
   Linux `musb_sunxi` and `phy-sun4i-usb`.
 
+## Desktop app (`desktop/`)
+
+The FPVault Desktop companion bundles third-party executables. They are not
+committed to this repository: `desktop/scripts/fetch-binaries.mjs` downloads
+them at build time against the sha256 digests pinned in
+`desktop/resources/binaries.lock.json`.
+
+- **[FFmpeg](https://ffmpeg.org/)** 6.1.1 (GPL-2.0-or-later, built with
+  `--enable-gpl` and libx264) — bundled as a static binary for the optional
+  H.264/MP4 export. Corresponding source:
+  https://ffmpeg.org/releases/ffmpeg-6.1.1.tar.xz. The binaries come from
+  [eugeneware/ffmpeg-static](https://github.com/eugeneware/ffmpeg-static).
+  Nothing else in the app uses it — import, repair, join and playback are
+  pure TypeScript.
+- **[x264](https://www.videolan.org/developers/x264.html)** (GPL-2.0-or-later)
+  — inside that FFmpeg build; it is what makes the MP4 export possible.
+- **[Electron](https://electronjs.org/)** (MIT), **Chromium** (BSD-3-Clause),
+  **[Node.js](https://nodejs.org/)** (MIT), **[React](https://react.dev/)**
+  (MIT), **[Vite](https://vite.dev/)** (MIT),
+  **[Tailwind CSS](https://tailwindcss.com/)** (MIT) — application runtime
+  and build tooling.
+
+The AVI reader in `desktop/src/shared/avi/` is a TypeScript port of this
+repository's own `tools/checkavi.py`, and the test suite asserts the two keep
+producing identical diagnostics.
+
 Combined work licensed **GPL-3.0-or-later**; vendored trees keep their
 original license files. Derived source files carry their origin in the
 header.

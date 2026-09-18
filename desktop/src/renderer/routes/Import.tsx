@@ -47,15 +47,7 @@ function SessionRow({
   )
 }
 
-export function Import({
-  device,
-  jobs,
-  s
-}: {
-  device: DeviceState
-  jobs: JobState[]
-  s: Strings
-}) {
+export function Import({ device, jobs, s }: { device: DeviceState; jobs: JobState[]; s: Strings }) {
   const volume = 'volume' in device ? device.volume : null
   const [contents, setContents] = useState<CardContentsInfo | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -151,38 +143,6 @@ export function Import({
         </footer>
       </section>
 
-      {jobs.length > 0 && (
-        <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
-          <h2 className="mb-3 text-sm font-semibold">{s.importScreen.transfers}</h2>
-          <ul className="space-y-3">
-            {jobs.map((job) => (
-              <li key={job.id}>
-                <div className="flex items-baseline justify-between text-xs">
-                  <span className="font-semibold">{job.label}</span>
-                  <span className="text-[var(--color-muted)]">{job.phase}</span>
-                </div>
-                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-line)]">
-                  <div
-                    className="h-full rounded-full transition-[width]"
-                    style={{
-                      width: `${Math.round((job.progress ?? 0) * 100)}%`,
-                      background:
-                        job.phase === 'failed'
-                          ? 'var(--color-record)'
-                          : job.phase === 'done'
-                            ? 'var(--color-ok)'
-                            : 'var(--color-brand)'
-                    }}
-                  />
-                </div>
-                <p className="mt-1 font-[family-name:var(--font-mono)] text-[11px] text-[var(--color-muted)]">
-                  {job.error ?? job.detail}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
     </div>
   )
 }

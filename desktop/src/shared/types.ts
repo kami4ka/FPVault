@@ -117,7 +117,7 @@ export interface FrameIndex {
 /** Mirrors main/jobs/queue.ts; duplicated here to keep this file import-free. */
 export interface JobState {
   id: string
-  kind: 'import' | 'repair' | 'join'
+  kind: 'import' | 'repair' | 'join' | 'export'
   label: string
   phase: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
   progress: number | null
@@ -211,9 +211,13 @@ export interface Api {
     list(): Promise<JobState[]>
     onChange(fn: (j: JobState) => void): () => void
     importSessions(volumePath: string, dcfDirs: number[]): Promise<string[]>
+    joinSession(sessionId: string): Promise<string>
+    exportSession(sessionId: string): Promise<string>
     cancel(id: string): Promise<void>
   }
   app: {
     versions(): Promise<{ app: string; electron: string; node: string; chrome: string }>
+    /** False when ffmpeg was not bundled: the MP4 export is then unavailable. */
+    canExport(): Promise<boolean>
   }
 }

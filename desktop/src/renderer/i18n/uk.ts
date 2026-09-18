@@ -81,6 +81,10 @@ export const uk: typeof en = {
   libraryScreen: {
     empty: 'Ще нічого не імпортовано',
     reveal: 'Показати',
+    join: 'Склеїти',
+    export: 'Експорт MP4',
+    exportHint: 'Закодувати сесію в H.264 для поширення, приблизно вдесятеро менший файл',
+    joinHint: 'Об’єднати всі кліпи сесії в один файл без втрат',
     playHint: 'Відтворити цей кліп',
     setStart: 'Вказати час початку',
     changeStart: 'Змінити час початку',
@@ -100,8 +104,16 @@ export const uk: typeof en = {
     dropout: 'втрачений кадр — тут зник сигнал камери',
     frameOf: (i: number, n: number) => `кадр ${i} з ${n}`
   },
+  jobPhase: {
+    queued: 'у черзі',
+    running: 'виконується',
+    done: 'готово',
+    failed: 'помилка',
+    cancelled: 'скасовано'
+  },
   common: {
     rescan: 'Пересканувати',
+    cancel: 'Скасувати',
     unknown: 'невідомо'
   }
 }

@@ -4,6 +4,7 @@ import type { JobState, LibraryView } from '@shared/types'
 import { DeviceRail, type Route } from './components/DeviceRail.js'
 import { StatusCard } from './components/StatusCard.js'
 import { TaskTiles } from './components/TaskTiles.js'
+import { JobBar } from './components/JobBar.js'
 import { Import } from './routes/Import.js'
 import { Library } from './routes/Library.js'
 import { detectLang, setLang as persistLang, strings, type Lang } from './i18n/index.js'
@@ -72,6 +73,7 @@ export function App() {
         </header>
 
         <div className="mx-auto max-w-4xl px-6 pb-10">
+          <JobBar jobs={jobs} s={s} />
           {route === 'device' && (
             <>
               <StatusCard state={state} s={s} onAction={() => setRoute('import')} />

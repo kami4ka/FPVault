@@ -11,6 +11,9 @@ import { scanCard, type CardSession } from './library/scanner.js'
 import { Store } from './library/store.js'
 import { inferSessionTimes, sessionLabel } from './library/timestamps.js'
 import { importSession } from './jobs/import.js'
+import { joinSession } from './jobs/join.js'
+import { exportSessionMp4 } from './jobs/export.js'
+import { ffmpegAvailable } from './tools/ffmpeg.js'
 import { JobQueue } from './jobs/queue.js'
 
 let store: Store
@@ -177,7 +180,30 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
     )
   })
 
+  ipcMain.handle('jobs:joinSession', (_e, sessionId: string) => {
+    const session = store.sessions().find((x) => x.id === sessionId)
+    if (!session) throw new Error(`no such session: ${sessionId}`)
+    const label = sessionLabel(session.dcfDir, session.startUtc)
+    return queue.add('join', label, async (ctx) => {
+      const res = await joinSession(sessionId, label, store, ctx)
+      broadcast('library:change', buildView())
+      return res
+    })
+  })
+
+  ipcMain.handle('jobs:exportSession', (_e, sessionId: string) => {
+    const session = store.sessions().find((x) => x.id === sessionId)
+    if (!session) throw new Error(`no such session: ${sessionId}`)
+    const label = sessionLabel(session.dcfDir, session.startUtc)
+    return queue.add('export', `${label} (MP4)`, async (ctx) => {
+      const res = await exportSessionMp4(sessionId, label, store, ctx)
+      broadcast('library:change', buildView())
+      return res
+    })
+  })
+
   /* ---- app ---- */
+  ipcMain.handle('app:canExport', () => ffmpegAvailable())
   ipcMain.handle('app:versions', () => ({
     app: app.getVersion(),
     electron: process.versions.electron,

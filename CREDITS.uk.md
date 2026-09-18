@@ -36,6 +36,32 @@
   (`src/usbphy.c`, частини `src/usbmsc.c`), звірено з мейнлайновими Linux
   `musb_sunxi` і `phy-sun4i-usb`.
 
+## Застосунок для комп'ютера (`desktop/`)
+
+Компаньйон FPVault Desktop містить вкладені сторонні виконувані файли. У
+репозиторій вони не комітяться: `desktop/scripts/fetch-binaries.mjs`
+завантажує їх під час збірки й звіряє з sha256, зафіксованими в
+`desktop/resources/binaries.lock.json`.
+
+- **[FFmpeg](https://ffmpeg.org/)** 6.1.1 (GPL-2.0-or-later, зібраний із
+  `--enable-gpl` та libx264) — вкладений статичний бінарник для
+  необов'язкового експорту в H.264/MP4. Відповідні вихідні коди:
+  https://ffmpeg.org/releases/ffmpeg-6.1.1.tar.xz. Самі бінарники — з
+  [eugeneware/ffmpeg-static](https://github.com/eugeneware/ffmpeg-static).
+  Більше ніщо в застосунку його не використовує: імпорт, ремонт, склеювання
+  й відтворення — чистий TypeScript.
+- **[x264](https://www.videolan.org/developers/x264.html)** (GPL-2.0-or-later)
+  — усередині тієї збірки FFmpeg; саме він робить можливим експорт у MP4.
+- **[Electron](https://electronjs.org/)** (MIT), **Chromium** (BSD-3-Clause),
+  **[Node.js](https://nodejs.org/)** (MIT), **[React](https://react.dev/)**
+  (MIT), **[Vite](https://vite.dev/)** (MIT),
+  **[Tailwind CSS](https://tailwindcss.com/)** (MIT) — середовище виконання
+  та інструменти збірки.
+
+Читач AVI у `desktop/src/shared/avi/` — це порт на TypeScript власного
+`tools/checkavi.py` із цього ж репозиторію, і набір тестів стежить, щоб обидві
+реалізації давали однакові діагностики.
+
 Сукупна робота ліцензована **GPL-3.0-or-later**; вендоровані дерева
 зберігають свої файли ліцензій. Похідні файли коду несуть позначку
 походження в заголовку.

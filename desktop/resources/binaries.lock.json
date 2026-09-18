@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "Bundled third-party executables, pinned by sha256. The binaries are not",
+    "committed - scripts/fetch-binaries.mjs downloads them into",
+    "resources/bin/<platform>-<arch>/ at install and build time, and refuses",
+    "anything whose digest does not match.",
+    "",
+    "ffmpeg is a GPL build (it needs libx264 for the H.264 export), which is",
+    "compatible with this project's GPL-3.0-or-later. Redistributing it",
+    "carries the usual obligation to offer corresponding source: see",
+    "sourceUrl below and the entry in CREDITS.md.",
+    "",
+    "Nothing else in the app depends on ffmpeg. Import, repair, join and",
+    "playback are all pure TypeScript, so a missing or broken ffmpeg costs",
+    "only the optional MP4 export."
+  ],
+  "ffmpeg": {
+    "version": "6.1.1",
+    "license": "GPL-3.0-or-later",
+    "sourceUrl": "https://ffmpeg.org/releases/ffmpeg-6.1.1.tar.xz",
+    "upstream": "https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1",
+    "platforms": {
+      "darwin-arm64": {
+        "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64",
+        "sha256": "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584",
+        "size": 45568216
+      },
+      "darwin-x64": {
+        "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64",
+        "sha256": "ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894",
+        "size": 78862176
+      },
+      "linux-x64": {
+        "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64",
+        "sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
+        "size": 79826272
+      },
+      "win32-x64": {
+        "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-win32-x64",
+        "sha256": "04e1307997530f9cf2fe35cba2ca7e8875ca91da02f89d6c7243df819c94ad00",
+        "size": 82797568,
+        "exe": true
+      }
+    }
+  }
+}

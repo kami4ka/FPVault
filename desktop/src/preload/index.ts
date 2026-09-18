@@ -39,10 +39,13 @@ const api: Api = {
     onChange: (fn) => on<JobState>('jobs:change', fn),
     importSessions: (volumePath, dcfDirs) =>
       ipcRenderer.invoke('jobs:importSessions', volumePath, dcfDirs),
+    joinSession: (sessionId) => ipcRenderer.invoke('jobs:joinSession', sessionId),
+    exportSession: (sessionId) => ipcRenderer.invoke('jobs:exportSession', sessionId),
     cancel: (id) => ipcRenderer.invoke('jobs:cancel', id)
   },
   app: {
-    versions: () => ipcRenderer.invoke('app:versions')
+    versions: () => ipcRenderer.invoke('app:versions'),
+    canExport: () => ipcRenderer.invoke('app:canExport')
   }
 }
 
