@@ -62,20 +62,32 @@ Host test suite: `make -C tests/host` (no cross-toolchain needed).
 
 ## Hardware
 
+### FPVault board v1
+
+![FPVault board v1](docs/img/board-v1.jpg)
+
+The purpose-built DVR board, 2-layer, four mounting holes. It sits inline
+in the video link: `CVBS_IN` from the camera, `CVBS_OUT` to the VTX. The
+bypass is analog — a THS7374 video amplifier feeds a TS5A3153 switch that
+passes the camera straight to the output with the firmware doing nothing
+(PE4 at its pull-down default), and the same amplifier taps the picture
+for the F1C200s's decoder. Power comes from USB-C or a `5V_IN` pad
+through a TPS2116 mux; `RX`/`TX` pads expose UART0. Same F1C200s + 16 MB
+W25Q128 NOR + microSD + EA3059C core as the dev board, with SW1 reset and
+SW2 for FEL (see docs/BRINGUP.md). Two units brought up and recording;
+findings in docs/HARDWARE-ERRATA.md.
+
+Schematic: [PDF](docs/hw/fpvault-board-v1-schematic.pdf) ·
+[PNG](docs/hw/fpvault-board-v1-schematic.png)
+
+### Development board
+
 ![development board](docs/img/dev-board.jpg)
 
-The development board everything above was brought up on: F1C200s (under
-the heatsink), 16 MB W25Q128 SPI-NOR, USB-C (power + the mass-storage
-card reader), microSD socket, CVBS `TV IN` pins and a `TV_OUT` header,
-EA3059C PMIC. SW2 shorts a NOR pin: hold it while plugging USB in and the
-chip's BROM lands in FEL recovery — the board is always reflashable over
-bare USB, no UART (see docs/BRINGUP.md). Quirks of this revision are
-collected in docs/HARDWARE-ERRATA.md.
-
-A proper DVR board is in development: an analog bypass so the unit can
-sit inline in the video link (camera in, VTX out — the firmware stays a
-record-only tap; the bypass is passive analog), plus mounting holes and
-real soldering pads.
+The generic F1C200s module everything was first brought up on: F1C200s
+(under the heatsink), W25Q128 SPI-NOR, USB-C, microSD, CVBS `TV IN` pins
+and a `TV_OUT` header, EA3059C PMIC. Its quirks are the first part of
+docs/HARDWARE-ERRATA.md.
 
 ## Building
 

@@ -1,9 +1,9 @@
-# Hardware errata (current board revision)
+# Hardware errata
 
 English | [Українська](HARDWARE-ERRATA.uk.md)
 
-Observations from bring-up that firmware cannot fix; targets for the next
-board spin.
+Observations from bring-up that firmware cannot fix. Sections 1–3 are the
+generic F1C200s development board; the last section is the FPVault board.
 
 ## 1. Power rails have thin brownout margins
 
@@ -73,7 +73,7 @@ sprays noise bytes into the console (this is why console commands require
 the ':' prefix). A future board should route UART0 to its own USB-serial
 directly.
 
-## v2 board (analog bypass) — bring-up findings
+## FPVault board v1 (analog bypass) — bring-up findings
 
 - **TVD input termination goes on the source side of the coupling cap.**
   As drawn, the 75 Ω shunt (R31) sat between C33 and the TVD pin, tying
@@ -82,8 +82,8 @@ directly.
   around ground, the sync tips fell below the ADC's range, and the TVD
   reported no-signal on a textbook 1 Vpp waveform at the pin. Moving R31
   to the R33/C33 junction (same divider, same 1 Vpp, pin side floating)
-  locked instantly: status 0x0E, 30 fps, first v2 recording.
-- **Reflow the QFN before doubting anything else.** The first v2 board
+  locked instantly: status 0x0E, 30 fps, first recording on the board.
+- **Reflow the QFN before doubting anything else.** The first FPVault v1 board
   spent two days "dead" - no FEL, rails and crystal fine, every IC warm,
   the SoC swapped twice - with the RESET pin floating at the QFN side
   while the net measured 3.3 V at the button. See BRINGUP troubleshooting.
