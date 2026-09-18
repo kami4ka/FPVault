@@ -108,6 +108,7 @@ microSD + EA3059C, що й на платі розробки, плюс SW1 (ск�
 ```sh
 make            # build/fpvault.bin
 make deploy     # надіслати на плату, що стоїть у промпті U-Boot (YMODEM)
+make dfu        # оновити працюючу плату через USB (dfu-util)
 ```
 
 Цикл розробки розраховує на U-Boot у SPI-NOR плати: `loady 0x80000000`,
