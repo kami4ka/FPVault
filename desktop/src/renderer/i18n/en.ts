@@ -82,6 +82,36 @@ export const en = {
       'The board has no clock, so every clip on the card is stamped 2020-01-01. Times here come from the session start you set plus each clip\'s real duration. A ~ marks a gap that is a minimum rather than a measurement.'
   }
 ,
+  firmwareScreen: {
+    releases: 'Releases',
+    check: 'Check now',
+    newest: 'newest',
+    prerelease: 'pre-release',
+    none: 'No firmware releases found',
+    installed: 'Installed',
+    install: (tag: string) => `Install ${tag}`,
+    cannotFlash: 'Connect the board in card-reader mode to install firmware',
+    whyUnknown:
+      'The board does not report its firmware version over USB. It prints it to the serial console at boot, which this app cannot read. Installing the same release twice is harmless, so there is no need to be sure.',
+    safetyNote:
+      'Nothing is written to the board until the whole image has arrived and the board has checked it. A cable pulled mid-transfer changes nothing; the second or so of writing is the only moment that matters, and the app says when that is happening.',
+    capableDfu: {
+      title: 'This board can be updated over USB',
+      body: 'It exposes the DFU interface, so it runs v0.9.2 or newer. The update takes a few seconds and the board restarts itself.'
+    },
+    capableLegacy: {
+      title: 'This board predates the USB update interface',
+      body: 'It runs v0.9.1 or earlier, which has no DFU interface at all. One recovery flash over FEL brings it onto the normal update path for good.'
+    },
+    capableFel: {
+      title: 'This board is in recovery mode',
+      body: 'The boot ROM is waiting. Firmware can be written from here even if the flash is blank or damaged.'
+    },
+    capableNone: {
+      title: 'No board connected',
+      body: 'Plug the board in to install firmware. Releases can still be browsed without one.'
+    }
+  },
   player: {
     close: 'Close',
     play: 'Play',

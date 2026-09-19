@@ -117,7 +117,7 @@ export interface FrameIndex {
 /** Mirrors main/jobs/queue.ts; duplicated here to keep this file import-free. */
 export interface JobState {
   id: string
-  kind: 'import' | 'repair' | 'join' | 'export'
+  kind: 'import' | 'repair' | 'join' | 'export' | 'firmware'
   label: string
   phase: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
   progress: number | null
@@ -185,6 +185,15 @@ export interface ClipMedia {
   durationSec: number
 }
 
+export interface ReleaseInfo {
+  tag: string
+  name: string
+  prerelease: boolean
+  publishedAt: string
+  notes: string
+  hasFirmware: boolean
+}
+
 export interface Api {
   device: {
     get(): Promise<DeviceState>
@@ -214,6 +223,12 @@ export interface Api {
     joinSession(sessionId: string): Promise<string>
     exportSession(sessionId: string): Promise<string>
     cancel(id: string): Promise<void>
+  }
+  firmware: {
+    releases(force?: boolean): Promise<ReleaseInfo[]>
+    /** False when USB access is unavailable: offer FEL instead. */
+    canFlash(): Promise<boolean>
+    flash(tag: string): Promise<string>
   }
   app: {
     versions(): Promise<{ app: string; electron: string; node: string; chrome: string }>

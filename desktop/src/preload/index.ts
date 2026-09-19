@@ -43,6 +43,11 @@ const api: Api = {
     exportSession: (sessionId) => ipcRenderer.invoke('jobs:exportSession', sessionId),
     cancel: (id) => ipcRenderer.invoke('jobs:cancel', id)
   },
+  firmware: {
+    releases: (force) => ipcRenderer.invoke('firmware:releases', force),
+    canFlash: () => ipcRenderer.invoke('firmware:canFlash'),
+    flash: (tag) => ipcRenderer.invoke('firmware:flash', tag)
+  },
   app: {
     versions: () => ipcRenderer.invoke('app:versions'),
     canExport: () => ipcRenderer.invoke('app:canExport')

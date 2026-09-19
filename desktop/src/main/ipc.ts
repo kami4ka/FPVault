@@ -14,6 +14,9 @@ import { importSession } from './jobs/import.js'
 import { joinSession } from './jobs/join.js'
 import { exportSessionMp4 } from './jobs/export.js'
 import { ffmpegAvailable } from './tools/ffmpeg.js'
+import { flashRelease } from './jobs/firmware.js'
+import { dfuAvailable } from './update/dfu.js'
+import { listReleases } from './update/releases.js'
 import { JobQueue } from './jobs/queue.js'
 
 let store: Store
@@ -201,6 +204,23 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
       return res
     })
   })
+
+  /* ---- firmware ---- */
+  ipcMain.handle('firmware:releases', async (_e, force?: boolean) => {
+    const releases = await listReleases(force ?? false)
+    return releases.map((r) => ({
+      tag: r.tag,
+      name: r.name,
+      prerelease: r.prerelease,
+      publishedAt: r.publishedAt,
+      notes: r.notes,
+      hasFirmware: r.assets.some((a) => a.name === 'fpvault.bin')
+    }))
+  })
+  ipcMain.handle('firmware:canFlash', () => dfuAvailable())
+  ipcMain.handle('firmware:flash', (_e, tag: string) =>
+    queue.add('firmware', `Firmware ${tag}`, (ctx) => flashRelease(tag, ctx))
+  )
 
   /* ---- app ---- */
   ipcMain.handle('app:canExport', () => ffmpegAvailable())

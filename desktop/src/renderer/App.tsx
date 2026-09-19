@@ -7,6 +7,7 @@ import { TaskTiles } from './components/TaskTiles.js'
 import { JobBar } from './components/JobBar.js'
 import { Import } from './routes/Import.js'
 import { Library } from './routes/Library.js'
+import { Firmware } from './routes/Firmware.js'
 import { detectLang, setLang as persistLang, strings, type Lang } from './i18n/index.js'
 import { useDevice } from './useDevice.js'
 
@@ -90,7 +91,7 @@ export function App() {
           )}
           {route === 'import' && <Import device={state} jobs={jobs} s={s} />}
           {route === 'library' && <Library library={library} s={s} />}
-          {route === 'firmware' && <Placeholder title={s.nav.firmware} />}
+          {route === 'firmware' && <Firmware device={state} s={s} />}
           {route === 'settings' && <Placeholder title={s.nav.settings} />}
         </div>
       </main>

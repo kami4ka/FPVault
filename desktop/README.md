@@ -116,6 +116,32 @@ Two ways out of the library:
   card's originals, because the demuxer needs a real index and an
   unfinalised clip would feed ffmpeg 200 MB of old cluster data.
 
+## Firmware update
+
+`Firmware` lists this repository's releases and installs one over USB. The
+app speaks DFU 1.1 itself rather than bundling dfu-util: that gives real
+byte-level progress, proper cancellation, and one less 80 MB executable per
+platform. node-usb is an *optional* dependency used only for this, so a
+machine where the native module will not load still imports, repairs and
+plays clips.
+
+Two things the implementation has to get right, both learned against real
+hardware:
+
+- **Zero-length control writes need an explicit empty buffer.** node-usb's
+  WebUSB layer dereferences the data argument even when there is none, so
+  `CLRSTATUS` and the final `DNLOAD` must pass `new Uint8Array(0)`.
+- **The board keeps its DFU state across host sessions.** The firmware only
+  resets its block counter when a `DNLOAD` arrives in `dfuIDLE`, so an
+  interrupted update leaves it expecting block N and the next attempt's
+  block 0 is rejected as a bad address. The app sends `CLRSTATUS` and
+  `ABORT` and confirms `dfuIDLE` before the first byte; without that, one
+  cancelled update would poison every later one until a replug.
+
+Nothing reaches the flash until the whole image has arrived and the board
+has checked it, so a cable pulled mid-transfer is harmless. Measured on a
+real board: 80,096 bytes sent, burnt, verified and rebooted in 0.5 s.
+
 ## Licence
 
 GPL-3.0-or-later, like the firmware. Bundled tools keep their own licences;
