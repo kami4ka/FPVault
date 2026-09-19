@@ -172,6 +172,22 @@ Recovery writes U-Boot at NOR 0 and firmware at 1 MB, the layout
 cannot be reached any other way: blank flash, firmware older than the DFU
 interface, or an image that bricked the normal boot.
 
+## Icon
+
+Derived from `docs/img/logo.png` — the mark the repository README already
+shows — by `scripts/make-icons.py`, which writes `resources/icon.icns`,
+`icon.ico` and `icon.png`. The outputs are committed so a build never needs
+an image toolchain; the script exists so the derivation can be repeated
+rather than being a binary someone once made in an editor.
+
+Only the mark is used, never the wordmark: at 16 px a wordmark is a smudge,
+and the mark alone is what a dock, an Alt-Tab switcher and an installer
+actually show. It sits on a white superellipse tile, which is the shape
+macOS uses, carrying a hairline in the app's own `--color-line` so the tile
+still has an edge against a white background. The logo is drawn on white and
+the tile is white, so the two meet without any colour keying and there is no
+halo to go wrong.
+
 ## Settings
 
 Short on purpose. Three things there change what the app does, and each one

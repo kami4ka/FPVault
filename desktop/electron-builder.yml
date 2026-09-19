@@ -19,8 +19,16 @@ extraResources:
   - from: resources/bin/${platform}-${arch}
     to: bin
     filter: ['**/*']
+  # macOS reads the icon from the bundle and Windows from the exe, but a
+  # Linux window has to be handed one at runtime, so it needs to be a file
+  # on disk rather than something sealed inside the asar.
+  - from: resources/icon.png
+    to: icon.png
 
+# All three are derived from docs/img/logo.png by scripts/make-icons.py and
+# committed, so a build never needs an image toolchain.
 mac:
+  icon: resources/icon.icns
   category: public.app-category.utilities
   hardenedRuntime: true
   gatekeeperAssess: false
@@ -37,11 +45,13 @@ mac:
     - resources/bin/sunxi-fel
 
 win:
+  icon: resources/icon.ico
   target:
     - target: nsis
       arch: [x64]
 
 linux:
+  icon: resources/icon.png
   category: Utility
   target:
     - target: AppImage

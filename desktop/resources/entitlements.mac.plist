@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  Hardened-runtime exceptions for the macOS build. electron-builder.yml has
+  named this file since the packaging config was written; without it a signed
+  build fails at the codesign step.
+
+  Each one is here for a reason, and there are no others:
+
+  - allow-jit and allow-unsigned-executable-memory: Chromium's V8 compiles
+    JavaScript at runtime. Electron cannot start under the hardened runtime
+    without them.
+  - disable-library-validation: the app runs ffmpeg and sunxi-fel out of its
+    own Resources directory. They are signed with the same Developer ID, but
+    library validation still refuses a process that loads code not signed by
+    the same team as its main binary in some configurations, and this is the
+    documented exception for bundled helpers.
+
+  Deliberately absent: the app is not sandboxed, so no device or file-access
+  entitlements are needed. sunxi-fel reaches the board's boot ROM over libusb
+  and the card is an ordinary mounted volume.
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>

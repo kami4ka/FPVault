@@ -11,6 +11,18 @@ import { registerIpc } from './ipc.js'
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
 
+/**
+ * The window icon, which only Linux actually needs: macOS takes it from the
+ * bundle and Windows from the executable, both at package time. Returns
+ * undefined elsewhere so those two keep their own.
+ */
+function windowIcon(): string | undefined {
+  if (process.platform === 'darwin' || process.platform === 'win32') return undefined
+  return app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(dirname, '../../resources/icon.png')
+}
+
 const watcher = new DeviceWatcher()
 let win: BrowserWindow | null = null
 
@@ -21,6 +33,7 @@ function createWindow(): BrowserWindow {
     minWidth: 940,
     minHeight: 620,
     show: false,
+    icon: windowIcon(),
     backgroundColor: '#f7f8f9',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
