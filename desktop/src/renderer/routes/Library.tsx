@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react'
 import { ClipPlayer } from '../components/ClipPlayer.js'
 import { ClipThumb } from '../components/ClipThumb.js'
-import type { LibraryClipView, LibraryView } from '@shared/types'
+import type { ExportFile, LibraryClipView, LibraryView } from '@shared/types'
 import { bytes, clockTime, duration, toLocalInput } from '../components/format.js'
 import type { Strings } from '../i18n/index.js'
 
@@ -84,12 +84,14 @@ function SessionGroup({
   s,
   onSetStart,
   onPlay,
+  onPlayExport,
   canExport
 }: {
   session: LibraryView['sessions'][number]
   s: Strings
   onSetStart: (id: string, iso: string | null) => void
   onPlay: (clip: LibraryClipView) => void
+  onPlayExport: (f: ExportFile) => void
   canExport: boolean
 }) {
   const [open, setOpen] = useState(true)
@@ -155,6 +157,8 @@ function SessionGroup({
         )}
       </header>
 
+      <SessionExports files={session.exports} s={s} onPlay={onPlayExport} />
+
       {open && (
         <ul className="border-t border-[var(--color-line)]">
           {session.clips.map((c) => (
@@ -166,8 +170,70 @@ function SessionGroup({
   )
 }
 
+/**
+ * What this session has produced.
+ *
+ * These sit at the top of the session they came from, above its clips and
+ * separated from them, because that is the question being asked: not "what
+ * exports exist" but "what did this flight turn into".
+ *
+ * A joined AVI opens in the built-in player, which is the only viewer that
+ * reliably plays this MJPEG format. An MP4 goes to the system player, which
+ * handles H.264 everywhere and is what a person shares from.
+ */
+function SessionExports({
+  files,
+  s,
+  onPlay
+}: {
+  files: ExportFile[]
+  s: Strings
+  onPlay: (f: ExportFile) => void
+}) {
+  if (!files.length) return null
+
+  return (
+    <ul className="border-t border-[var(--color-line)] bg-[var(--color-line)]/25">
+      {files.map((f) => (
+        <li key={f.file} className="flex items-center gap-3 px-4 py-2">
+          <span
+            className="w-11 shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-semibold uppercase text-white"
+            style={{ background: f.kind === 'mp4' ? 'var(--color-info)' : 'var(--color-busy)' }}
+          >
+            {f.kind}
+          </span>
+          <span className="min-w-0 flex-1 truncate font-[family-name:var(--font-mono)] text-xs">
+            {f.name}
+          </span>
+          <span className="w-20 shrink-0 text-right text-xs text-[var(--color-muted)]">
+            {bytes(f.bytes)}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              f.kind === 'avi' ? onPlay(f) : void window.fpvault.library.open(f.file)
+            }
+            className="shrink-0 rounded px-2 py-0.5 text-xs text-[var(--color-brand)] hover:underline"
+          >
+            {f.kind === 'avi' ? s.libraryScreen.play : s.libraryScreen.open}
+          </button>
+          <button
+            type="button"
+            onClick={() => void window.fpvault.library.reveal(f.file)}
+            className="shrink-0 rounded px-2 py-0.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+          >
+            {s.libraryScreen.reveal}
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function Library({ library, s }: { library: LibraryView | null; s: Strings }) {
-  const [playing, setPlaying] = useState<LibraryClipView | null>(null)
+  /* The player takes either a clip id or a library-relative path, so an
+   * export and a clip can share one viewer. */
+  const [playing, setPlaying] = useState<{ id: string; name: string } | null>(null)
   const [canExport, setCanExport] = useState(false)
 
   useEffect(() => {
@@ -196,7 +262,8 @@ export function Library({ library, s }: { library: LibraryView | null; s: String
           session={session}
           s={s}
           onSetStart={setStart}
-          onPlay={setPlaying}
+          onPlay={(c) => setPlaying({ id: c.id, name: c.cardName })}
+          onPlayExport={(f) => setPlaying({ id: f.file, name: f.name })}
           canExport={canExport}
         />
       ))}
@@ -205,7 +272,7 @@ export function Library({ library, s }: { library: LibraryView | null; s: String
       {playing && (
         <ClipPlayer
           clipId={playing.id}
-          name={playing.cardName}
+          name={playing.name}
           s={s}
           onClose={() => setPlaying(null)}
         />

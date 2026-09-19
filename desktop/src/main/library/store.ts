@@ -54,6 +54,13 @@ export interface LibrarySession {
   /** User-supplied real start time for the session, if given. */
   startUtc: string | null
   clipIds: string[]
+  /**
+   * Files join and export produced from this session, as library-relative
+   * paths. Recorded rather than inferred from the filename: a session can be
+   * renamed by giving it a real start time, and two sessions flown on the
+   * same minute would otherwise collide.
+   */
+  exportFiles?: string[]
 }
 
 export interface Library {
@@ -139,6 +146,23 @@ export class Store {
     session.clipIds.sort(
       (a, b) => (this.data.clips[a]?.dcfIndex ?? 0) - (this.data.clips[b]?.dcfIndex ?? 0)
     )
+    await this.flush()
+  }
+
+  /** Remember that a session produced this file. */
+  async addExport(sessionId: string, file: string): Promise<void> {
+    const s = this.data.sessions[sessionId]
+    if (!s) return
+    s.exportFiles ??= []
+    if (!s.exportFiles.includes(file)) s.exportFiles.push(file)
+    await this.flush()
+  }
+
+  /** Forget a file that is no longer on disk. */
+  async forgetExport(sessionId: string, file: string): Promise<void> {
+    const s = this.data.sessions[sessionId]
+    if (!s?.exportFiles) return
+    s.exportFiles = s.exportFiles.filter((f) => f !== file)
     await this.flush()
   }
 

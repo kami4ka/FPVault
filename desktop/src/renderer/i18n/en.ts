@@ -66,6 +66,10 @@ export const en = {
   },
   libraryScreen: {
     empty: 'Nothing imported yet',
+    exports: 'Exports',
+    exportsHint: 'joined and converted files',
+    play: 'Play',
+    open: 'Open',
     reveal: 'Show',
     join: 'Join',
     export: 'Export MP4',

@@ -3,11 +3,12 @@
  * Every IPC handler, and the one guard that keeps the card safe.
  */
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { join, resolve, sep } from 'node:path'
+import { join, relative, resolve, sep } from 'node:path'
 import { defaultLibraryRoot } from './paths.js'
-import type { LibraryClipView, LibraryView } from '@shared/types'
+import type { ExportFile, LibraryClipView, LibraryView } from '@shared/types'
 import type { DeviceWatcher } from './device/watcher.js'
 import { frameTable, readFrame, type FrameTable } from '@shared/avi/frames'
+import { readdir, stat } from 'node:fs/promises'
 import { scanCard, type CardSession } from './library/scanner.js'
 import { Store } from './library/store.js'
 import { inferSessionTimes, sessionLabel } from './library/timestamps.js'
@@ -45,6 +46,61 @@ function cardRoots(watcher: DeviceWatcher): string[] {
   return vol ? [vol.path] : []
 }
 
+/** Describe one export file, or null when it is no longer on disk. */
+async function describeExport(rel: string): Promise<ExportFile | null> {
+  const lower = rel.toLowerCase()
+  const kind: ExportFile['kind'] = lower.endsWith('.avi')
+    ? 'avi'
+    : lower.endsWith('.mp4')
+      ? 'mp4'
+      : 'other'
+  if (kind === 'other') return null
+  try {
+    const st = await stat(join(store.root, rel))
+    return {
+      file: rel,
+      name: rel.split('/').pop() ?? rel,
+      bytes: st.size,
+      createdMs: st.mtimeMs,
+      kind
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Exports a session owns, newest first.
+ *
+ * The store is the record, but files that predate it — or a library rebuilt
+ * by scanning — are adopted by matching the name the exporter would have
+ * produced, which is the session's label with the unsafe characters
+ * replaced. That only guesses when there is nothing better to go on.
+ */
+async function exportsOf(sessionId: string, label: string): Promise<ExportFile[]> {
+  const session = store.sessions().find((x) => x.id === sessionId)
+  const recorded = new Set(session?.exportFiles ?? [])
+
+  const safe = label.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || sessionId
+  try {
+    for (const name of await readdir(join(store.root, 'exports'))) {
+      if (name.startsWith('.') || name.endsWith('.part')) continue
+      const base = name.replace(/\.[^.]+$/, '')
+      if (base === safe) recorded.add(`exports/${name}`)
+    }
+  } catch {
+    /* no exports directory yet */
+  }
+
+  const described = await Promise.all([...recorded].map(describeExport))
+  return described
+    .filter((e): e is ExportFile => e !== null)
+    .sort((a, b) => b.createdMs - a.createdMs)
+}
+
+/** Per-session exports, refreshed whenever the library is published. */
+let exportsIndex = new Map<string, ExportFile[]>()
+
 function buildView(): LibraryView {
   const sessions = store.sessions().map((s) => {
     const clips = store.clipsOf(s.id)
@@ -76,11 +132,26 @@ function buildView(): LibraryView {
       label: sessionLabel(s.dcfDir, s.startUtc),
       startUtc: s.startUtc,
       clips: view,
+      exports: exportsIndex.get(s.id) ?? [],
       durationSec: clips.reduce((n, c) => n + c.durationSec, 0),
       bytes: clips.reduce((n, c) => n + c.bytes, 0)
     }
   })
   return { root: store.root, sessions }
+}
+
+async function refreshExports() {
+  const next = new Map<string, ExportFile[]>()
+  for (const session of store.sessions()) {
+    next.set(session.id, await exportsOf(session.id, sessionLabel(session.dcfDir, session.startUtc)))
+  }
+  exportsIndex = next
+}
+
+/** Refresh what each session has produced, then publish the view. */
+async function publishLibrary() {
+  await refreshExports()
+  broadcast('library:change', buildView())
 }
 
 function broadcast(channel: string, payload: unknown) {
@@ -104,9 +175,13 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
   })
 
   /* ---- library ---- */
-  ipcMain.handle('library:get', () => buildView())
+  ipcMain.handle('library:get', async () => {
+    await refreshExports()
+    return buildView()
+  })
   ipcMain.handle('library:setSessionStart', async (_e, id: string, startUtc: string | null) => {
     await store.setSessionStart(id, startUtc)
+    await refreshExports()
     const view = buildView()
     broadcast('library:change', view)
     return view
@@ -128,6 +203,10 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
     const full = assertUnder(join(store.root, file), [store.root])
     shell.showItemInFolder(full)
   })
+  ipcMain.handle('library:open', (_e, file: string) => {
+    const full = assertUnder(join(store.root, file), [store.root])
+    return shell.openPath(full)
+  })
 
   /* ---- clip media ----
    * A clip's seek table is cached: opening the player then scrubbing it
@@ -137,9 +216,11 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
   const tableFor = async (clipId: string) => {
     const hit = tables.get(clipId)
     if (hit) return hit
+    /* A clip id, or a library-relative path so a joined export plays in the
+     * same viewer. Either way the path guard is what decides. */
     const clip = store.snapshot().clips[clipId]
-    if (!clip) return null
-    const path = assertUnder(join(store.root, clip.file), [store.root])
+    const rel = clip?.file ?? clipId
+    const path = assertUnder(join(store.root, rel), [store.root])
     const table = await frameTable(path)
     if (!table) return null
     const entry = { path, table }
@@ -190,7 +271,8 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
     const label = sessionLabel(session.dcfDir, session.startUtc)
     return queue.add('join', label, async (ctx) => {
       const res = await joinSession(sessionId, label, store, ctx)
-      broadcast('library:change', buildView())
+      await store.addExport(sessionId, relative(store.root, res.output))
+      await publishLibrary()
       return res
     })
   })
@@ -201,7 +283,8 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
     const label = sessionLabel(session.dcfDir, session.startUtc)
     return queue.add('export', `${label} (MP4)`, async (ctx) => {
       const res = await exportSessionMp4(sessionId, label, store, ctx)
-      broadcast('library:change', buildView())
+      await store.addExport(sessionId, relative(store.root, res.output))
+      await publishLibrary()
       return res
     })
   })

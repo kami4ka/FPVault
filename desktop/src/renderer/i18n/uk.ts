@@ -80,6 +80,10 @@ export const uk: typeof en = {
   },
   libraryScreen: {
     empty: 'Ще нічого не імпортовано',
+    exports: 'Експорти',
+    exportsHint: 'склеєні та перекодовані файли',
+    play: 'Відтворити',
+    open: 'Відкрити',
     reveal: 'Показати',
     join: 'Склеїти',
     export: 'Експорт MP4',

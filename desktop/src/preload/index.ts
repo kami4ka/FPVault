@@ -28,7 +28,8 @@ const api: Api = {
     setSessionStart: (id, startUtc) =>
       ipcRenderer.invoke('library:setSessionStart', id, startUtc),
     chooseRoot: () => ipcRenderer.invoke('library:chooseRoot'),
-    reveal: (file) => ipcRenderer.invoke('library:reveal', file)
+    reveal: (file) => ipcRenderer.invoke('library:reveal', file),
+    open: (file) => ipcRenderer.invoke('library:open', file)
   },
   clip: {
     media: (clipId) => ipcRenderer.invoke('clip:media', clipId),

@@ -148,6 +148,16 @@ export interface CardContentsInfo {
   reclaimableBytes: number
 }
 
+export interface ExportFile {
+  /** Path relative to the library root, which is all the renderer may name. */
+  file: string
+  name: string
+  bytes: number
+  createdMs: number
+  /** 'avi' plays in the built-in player; 'mp4' opens in the system player. */
+  kind: 'avi' | 'mp4' | 'other'
+}
+
 export interface LibraryView {
   root: string
   sessions: {
@@ -156,6 +166,8 @@ export interface LibraryView {
     label: string
     startUtc: string | null
     clips: LibraryClipView[]
+    /** What join and export produced from this session. */
+    exports: ExportFile[]
     durationSec: number
     bytes: number
   }[]
@@ -209,12 +221,17 @@ export interface Api {
     setSessionStart(sessionId: string, startUtc: string | null): Promise<LibraryView>
     chooseRoot(): Promise<LibraryView>
     reveal(file: string): Promise<void>
+    /** Hand a file to whatever the system uses for it. */
+    open(file: string): Promise<string>
   }
   clip: {
-    /** Seek table and geometry, read once when a clip is opened. */
-    media(clipId: string): Promise<ClipMedia | null>
+    /**
+     * Seek table and geometry. Takes a clip id, or a library-relative path
+     * so joined exports can be played with the same viewer.
+     */
+    media(clipOrPath: string): Promise<ClipMedia | null>
     /** One frame as JPEG bytes. Empty means a dropout: hold the last image. */
-    frame(clipId: string, index: number): Promise<Uint8Array>
+    frame(clipOrPath: string, index: number): Promise<Uint8Array>
   }
   jobs: {
     list(): Promise<JobState[]>
