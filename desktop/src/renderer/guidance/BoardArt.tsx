@@ -25,11 +25,24 @@ export type PartId =
   | 'cvbsOut'
   | 'power'
 
-export function BoardArt({ highlight, hand }: { highlight: PartId[]; hand: 'press' | null }) {
+export function BoardArt({
+  highlight,
+  hand,
+  tone
+}: {
+  highlight: PartId[]
+  hand: 'press' | null
+  tone?: 'success'
+}) {
   const on = (id: PartId) => (highlight.includes(id) ? 'hi' : '')
 
   return (
-    <svg viewBox="0 0 400 400" className="board-art h-full w-full" role="img" aria-hidden>
+    <svg
+      viewBox="0 0 400 400"
+      className={`board-art h-full w-full${tone === 'success' ? ' ok' : ''}`}
+      role="img"
+      aria-hidden
+    >
       {/* PCB */}
       <rect x="30" y="30" width="340" height="340" rx="18" className="pcb" />
 

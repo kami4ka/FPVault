@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DeviceState } from '@shared/types'
 import { BoardArt } from './BoardArt.js'
-import { SEQUENCES, type SequenceId } from './steps.js'
+import { LOCATE, SEQUENCES, type SequenceId } from './steps.js'
 import type { Strings } from '../i18n/index.js'
 import './guide.css'
 
@@ -51,16 +51,22 @@ export function BoardGuide({
   /* Restart when the caller switches sequences. */
   useEffect(() => setIndex(0), [sequence])
 
-  const step = steps[Math.min(index, steps.length - 1)]
+  /* The live device state gets the final say on where the animation is.
+   * When it has an opinion — the board reached recovery, or booted normally
+   * when it should not have — the guide jumps there from wherever its timer
+   * had got to, which is what makes this a view of the state machine rather
+   * than a recording running alongside one. */
+  const forcedId = LOCATE[sequence](device)
+  const forcedIndex = forcedId ? steps.findIndex((st) => st.id === forcedId) : -1
+  const shown = forcedIndex >= 0 ? forcedIndex : Math.min(index, steps.length - 1)
+  const step = steps[shown]
 
-  /* Advance: immediately if this step's predicate is already true of the
-   * live state, otherwise when its own time is up. */
   useEffect(() => {
-    if (!step) return
+    if (!step || step.terminal) return
 
-    const satisfied = step.waitFor?.(deviceRef.current) ?? false
-    if (satisfied) {
-      const next = index + 1
+    /* A step with its own predicate advances the moment it comes true. */
+    if (step.waitFor?.(deviceRef.current)) {
+      const next = shown + 1
       if (next >= steps.length) {
         onDone?.()
         return
@@ -70,14 +76,18 @@ export function BoardGuide({
     }
 
     const timer = setTimeout(() => {
-      setIndex((i) => {
-        const nxt = i + 1
-        if (nxt >= steps.length) return step.restart ? 0 : i
-        return nxt
+      setIndex(() => {
+        const next = shown + 1
+        /* Destinations are only reachable through the live state, never by
+         * running off the end of the list. */
+        const last = steps.findIndex((st) => st.terminal)
+        const limit = last >= 0 ? last : steps.length
+        if (next >= limit) return step.restart ? 0 : shown
+        return next
       })
     }, step.ms)
     return () => clearTimeout(timer)
-  }, [index, step, steps.length, device, onDone])
+  }, [shown, step, steps, device, onDone])
 
   if (!step) return null
 
@@ -109,33 +119,40 @@ export function BoardGuide({
     <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
       <div className="flex items-center gap-5">
         <div className="w-44 shrink-0">
-          <BoardArt highlight={step.highlight} hand={step.press ? 'press' : null} />
+          <BoardArt
+            highlight={step.highlight}
+            hand={step.press ? 'press' : null}
+            tone={step.tone}
+          />
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">{step.caption(s)}</p>
+            <p
+            className="text-sm font-semibold"
+            style={step.tone === 'success' ? { color: 'var(--color-ok)' } : undefined}
+          >
+            {step.caption(s)}
+          </p>
           {step.sub && (
             <p className="mt-1.5 max-w-prose text-xs leading-relaxed text-[var(--color-muted)]">
               {step.sub(s)}
             </p>
           )}
 
+          {/* Destinations are not steps, so they do not get a pip. */}
           <ol className="mt-4 flex gap-1.5" aria-label={s.guide.progress}>
-            {steps.map((st, i) => (
-              <li
-                key={st.id}
-                className="h-1 flex-1 rounded-full"
-                style={{
-                  background:
-                    i === index
-                      ? 'var(--color-brand)'
-                      : i < index
-                        ? 'var(--color-line)'
-                        : 'var(--color-line)',
-                  opacity: i === index ? 1 : i < index ? 0.9 : 0.4
-                }}
-              />
-            ))}
+            {steps
+              .filter((st) => !st.terminal)
+              .map((st, i) => (
+                <li
+                  key={st.id}
+                  className="h-1 flex-1 rounded-full"
+                  style={{
+                    background: i === shown ? 'var(--color-brand)' : 'var(--color-line)',
+                    opacity: i === shown ? 1 : i < shown ? 0.9 : 0.4
+                  }}
+                />
+              ))}
           </ol>
         </div>
       </div>

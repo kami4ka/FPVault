@@ -127,14 +127,19 @@ export const en = {
     cableTitle: 'Still nothing? Try a different cable',
     cableSub: 'Plenty of USB-C cables carry power only. A charge-only cable looks identical and never enumerates.',
 
+    foundTitle: 'There it is',
+    foundSub: 'The board is connected and the app can see it.',
+    afterDoneTitle: 'Back, and running the new firmware',
+    afterDoneSub: 'The card is available again.',
+
     felUnplugTitle: 'Unplug the board',
     felUnplugSub: 'Recovery starts from no power at all, so take the cable out first.',
     felHoldTitle: 'Press and hold SW2',
     felHoldSub: 'The small button beside the USB connector, top right. SW1 on the left edge is reset — not that one.',
     felPlugTitle: 'Keep holding SW2 and plug the USB back in',
     felPlugSub: 'This is the part that catches people out: the button has to be down before power arrives and stay down as it does.',
-    felReleaseTitle: 'Let go of SW2',
-    felReleaseSub: 'Recovery mode detected. SW2 only blinds the boot ROM while it looks for flash — the flash itself is untouched.',
+    felReleaseTitle: 'Recovery mode — you can let go of SW2',
+    felReleaseSub: 'The boot ROM is waiting and will accept a firmware write, even if the flash is blank or damaged. SW2 only blinds the ROM while it looks for flash; the flash itself is untouched. Pick a release below.',
     felMissedTitle: 'That was a normal boot',
     felMissedSub: 'SW2 was probably released too early, or was not down when power arrived. Let us try again.',
 

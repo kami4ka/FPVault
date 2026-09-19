@@ -94,6 +94,24 @@
   fill: var(--color-brand);
 }
 
+/* A destination: the board did the thing, so the highlight goes green and
+ * stops asking for attention. */
+.board-art.ok .part.hi .metal,
+.board-art.ok .part.hi .switch,
+.board-art.ok .part.hi .plunger,
+.board-art.ok .part.hi .chip,
+.board-art.ok .part.hi .socket,
+.board-art.ok .part.hi .pad,
+.board-art.ok .part.hi .led {
+  fill: var(--color-ok);
+}
+.board-art.ok .part.hi text {
+  fill: var(--color-ok);
+}
+.board-art.ok .pcb {
+  stroke: var(--color-ok);
+}
+
 /* The sustained press on SW2: two rings, offset, so it reads as "hold"
  * rather than "tap". */
 .board-art .press-ring {

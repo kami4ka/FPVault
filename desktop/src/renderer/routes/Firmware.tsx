@@ -53,19 +53,24 @@ function Capability({ device, s }: { device: DeviceState; s: Strings }) {
         </div>
       </div>
 
-      <div className="mt-4 border-t border-[var(--color-line)] pt-3">
-        <p className="text-xs">
-          <span className="text-[var(--color-muted)]">{s.firmwareScreen.installed}: </span>
-          <span className="font-[family-name:var(--font-mono)] font-semibold">
-            {version ?? s.card.firmwareUnknown}
-          </span>
-        </p>
-        {!version && (
-          <p className="mt-1 max-w-prose text-[11px] leading-relaxed text-[var(--color-muted)]">
-            {s.firmwareScreen.whyUnknown}
+      {/* A board in recovery is not running firmware at all — the boot ROM
+        * is in control — so an "installed version" line would be a category
+        * error rather than merely unknown. */}
+      {device.kind !== 'fel' && (
+        <div className="mt-4 border-t border-[var(--color-line)] pt-3">
+          <p className="text-xs">
+            <span className="text-[var(--color-muted)]">{s.firmwareScreen.installed}: </span>
+            <span className="font-[family-name:var(--font-mono)] font-semibold">
+              {version ?? s.card.firmwareUnknown}
+            </span>
           </p>
-        )}
-      </div>
+          {!version && device.kind !== 'absent' && (
+            <p className="mt-1 max-w-prose text-[11px] leading-relaxed text-[var(--color-muted)]">
+              {s.firmwareScreen.whyUnknown}
+            </p>
+          )}
+        </div>
+      )}
     </section>
   )
 }

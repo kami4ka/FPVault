@@ -15,6 +15,10 @@ export type SequenceId = 'notDetected' | 'enterFel' | 'afterUpdate'
 
 export interface GuideStep {
   id: string
+  /** A destination rather than a step: stop here, do not advance or loop. */
+  terminal?: boolean
+  /** Paints the highlight green instead of cyan — the board did the thing. */
+  tone?: 'success'
   /** Picked out of the strings table so both languages stay in step. */
   caption: (s: Strings) => string
   sub?: (s: Strings) => string
@@ -77,8 +81,16 @@ const notDetected: GuideStep[] = [
     sub: g('cableSub'),
     highlight: ['usbc'],
     ms: 2800,
-    waitFor: (d) => d.kind !== 'absent',
     restart: true
+  },
+  {
+    id: 'found',
+    caption: g('foundTitle'),
+    sub: g('foundSub'),
+    highlight: ['usbc', 'led'],
+    tone: 'success',
+    terminal: true,
+    ms: 0
   }
 ]
 
@@ -86,6 +98,12 @@ const notDetected: GuideStep[] = [
  * Entering FEL. The part prose always gets wrong is that SW2 has to be held
  * *before and during* the plug-in, not pressed afterwards — so the press is
  * shown as a sustained hold that overlaps the connection.
+ *
+ * The last two steps are destinations, not steps: once the board is really
+ * in recovery there is nothing left to instruct, and once it boots normally
+ * the attempt has to be restarted rather than continued. `locate` below
+ * sends the animation straight to whichever of them the live state says is
+ * true, from wherever it happens to be.
  */
 const enterFel: GuideStep[] = [
   {
@@ -110,23 +128,23 @@ const enterFel: GuideStep[] = [
     sub: g('felPlugSub'),
     highlight: ['sw2', 'usbc'],
     press: true,
-    ms: 6000,
-    waitFor: (d) => d.kind === 'fel' || d.kind === 'reader' || d.kind === 'legacy'
+    ms: 6000
   },
   {
-    id: 'release',
+    id: 'inFel',
     caption: g('felReleaseTitle'),
     sub: g('felReleaseSub'),
-    highlight: ['sw2'],
-    ms: 2600,
-    waitFor: (d) => d.kind === 'fel'
+    highlight: ['soc', 'usbc'],
+    tone: 'success',
+    terminal: true,
+    ms: 0
   },
   {
     id: 'missed',
     caption: g('felMissedTitle'),
     sub: g('felMissedSub'),
     highlight: ['sw2'],
-    ms: 3200,
+    ms: 3600,
     restart: true
   }
 ]
@@ -146,8 +164,7 @@ const afterUpdate: GuideStep[] = [
     caption: g('afterBackTitle'),
     sub: g('afterBackSub'),
     highlight: ['usbc', 'led'],
-    ms: 6000,
-    waitFor: (d) => d.kind === 'reader'
+    ms: 6000
   },
   {
     id: 'replugIfNot',
@@ -155,8 +172,16 @@ const afterUpdate: GuideStep[] = [
     sub: g('afterReplugSub'),
     highlight: ['usbc'],
     ms: 5000,
-    waitFor: (d) => d.kind === 'reader',
     restart: true
+  },
+  {
+    id: 'backNow',
+    caption: g('afterDoneTitle'),
+    sub: g('afterDoneSub'),
+    highlight: ['usbc', 'led'],
+    tone: 'success',
+    terminal: true,
+    ms: 0
   }
 ]
 
@@ -164,4 +189,24 @@ export const SEQUENCES: Record<SequenceId, GuideStep[]> = {
   notDetected,
   enterFel,
   afterUpdate
+}
+
+/**
+ * Where the live device state says the animation belongs, regardless of
+ * where its timer had got to. This is what makes the guide a view of the
+ * state machine rather than a recording that happens to run alongside one:
+ * the board entering recovery jumps straight to the recovery destination,
+ * and a board that booted normally jumps to the retry.
+ *
+ * Returning null means "no opinion — keep stepping".
+ */
+export const LOCATE: Record<SequenceId, (d: DeviceState) => string | null> = {
+  notDetected: (d) => (d.kind === 'absent' ? null : 'found'),
+  enterFel: (d) => {
+    if (d.kind === 'fel') return 'inFel'
+    /* A board that enumerated normally means SW2 was not held at power-on. */
+    if (d.kind === 'reader' || d.kind === 'legacy') return 'missed'
+    return null
+  },
+  afterUpdate: (d) => (d.kind === 'reader' || d.kind === 'legacy' ? 'backNow' : null)
 }
