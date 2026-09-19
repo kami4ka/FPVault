@@ -10,6 +10,9 @@ files:
   - out/**
   - package.json
 
+# Signs the macOS bundle ad-hoc, which is what makes a local build runnable.
+afterPack: scripts/afterPack.js
+
 # Bundled tools must live outside the asar: an executable cannot be run from
 # inside an archive, and macOS cannot sign one there either.
 asarUnpack:
@@ -34,6 +37,16 @@ mac:
   gatekeeperAssess: false
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
+  # There is no Developer ID for FPVault, so builds are signed ad-hoc: the
+  # bundle gets a valid local signature, which is what an arm64 Mac requires
+  # to run it at all, but no identity and no notarization. Left to itself
+  # electron-builder picks up whatever certificate happens to be in the
+  # keychain, which is how a build ends up signed by an unrelated project.
+  #
+  # A downloaded ad-hoc build is quarantined and Gatekeeper will refuse it
+  # until the user clears that, so a public release needs a real Developer
+  # ID. When there is one, delete this line and add `notarize: true`.
+  identity: null
   target:
     - target: dmg
       arch: [arm64, x64]

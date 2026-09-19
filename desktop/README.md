@@ -33,7 +33,22 @@ npm install
 npm run dev        # electron-vite with renderer HMR
 npm run build      # typecheck + bundle main/preload/renderer
 npm test           # AVI parser tests
+npm run pack       # a real .app/.exe in dist/, unpacked
 ```
+
+`npm run pack` is worth running before believing anything about tools or
+paths: `resolveBin` resolves somewhere different in a packaged app than in
+dev, and a bundled executable that is fine under `npm run dev` can be
+missing from the bundle entirely.
+
+FPVault has no Developer ID, so the macOS build is signed ad-hoc by
+`scripts/afterPack.js` — a valid local signature with no identity behind it.
+That is not optional: an arm64 Mac refuses to run a bundle whose signature
+does not cover it, and what electron-builder leaves behind when signing is
+off is only the linker's signature on the main executable. The build config
+sets `identity: null` so it cannot quietly pick up an unrelated certificate
+from the keychain instead. Such a build runs on the machine that made it; a
+public release needs a real Developer ID and notarization.
 
 ## Device detection
 
