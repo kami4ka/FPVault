@@ -118,6 +118,69 @@ export const en = {
       body: 'Plug the board in to install firmware. Releases can still be browsed without one.'
     }
   },
+  settingsScreen: {
+    library: {
+      title: 'Library',
+      body: 'Where imported clips, joined files and exports are kept.',
+      change: 'Change folder',
+      show: 'Show',
+      note: 'Choosing another folder starts a fresh index there. Clips already imported stay where they are, so point this back to find them again.'
+    },
+    exports: {
+      title: 'MP4 export',
+      body: 'Used by Export MP4. The lossless join has no settings of its own: it copies frames without re-encoding them.',
+      deinterlace: 'Deinterlace',
+      deinterlaceHint:
+        'The camera feeds the board interlaced analogue video, so this is usually right. Turn it off for a progressive camera, which it would only soften.',
+      quality: 'Quality',
+      high: 'High',
+      highHint: 'Slowest to encode and the largest file. Closest to what was recorded.',
+      balanced: 'Balanced',
+      balancedHint: 'About a tenth the size of the original, at roughly 45x real time.',
+      small: 'Small',
+      smallHint: 'Smallest file, visibly softer on grass, trees and other fine detail.'
+    },
+    gap: {
+      title: 'Gap between clips',
+      body: 'A clip that fills up rolls straight into the next one with no gap at all, and that case is detected exactly. A clip that ended early ended because the camera signal was lost, and how long that lasted is not recorded anywhere.',
+      label: 'Assume',
+      unit: 'seconds',
+      note: 'Six is the floor: the board needs five seconds of lost signal to close a clip and one second of stable signal to open the next. Raise it if your sessions have longer breaks. It only shifts the times shown after such a gap, never the video.'
+    },
+    tools: {
+      title: 'Bundled tools',
+      body: 'These ship inside the app; nothing needs installing. A tool missing from this build is why the feature beside it is unavailable.',
+      present: 'bundled',
+      missing: 'not in this build',
+      needs: {
+        ffmpeg: 'MP4 export',
+        'sunxi-fel': 'FEL recovery'
+      },
+      fetchHint: 'Build the app with npm run fetch-binaries and npm run build-fel to include it.',
+      pureNote:
+        'Import, repair, join and playback use neither. They are plain TypeScript, so a missing tool costs one feature rather than the app.'
+    },
+    licences: {
+      title: 'Open source licences',
+      body: 'FPVault Desktop is free software, and so is everything it bundles. The source link beside each entry is the offer of corresponding source that the GPL requires.',
+      source: 'Source',
+      what: {
+        fpvault: 'This app and the board firmware it updates.',
+        ffmpeg: 'Encodes the H.264/MP4 export. Bundled as a static binary.',
+        x264: 'The H.264 encoder inside that FFmpeg build.',
+        'sunxi-tools': 'sunxi-fel writes flash through the boot ROM during recovery.',
+        runtime: 'The application runtime and build tooling.'
+      }
+    },
+    language: {
+      title: 'Language',
+      body: 'Also switchable from the bottom of the sidebar.'
+    },
+    about: {
+      title: 'About',
+      version: 'Version'
+    }
+  },
   guide: {
     progress: 'Step',
     plugTitle: 'Plug the board into this computer',

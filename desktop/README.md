@@ -69,17 +69,18 @@ means unplugging and plugging back in**. The app says so rather than appearing
 to hang, and the bulk capacitor at the SD socket means "unplug, count to five"
 rather than a quick replug — see [docs/HARDWARE-ERRATA.md](../docs/HARDWARE-ERRATA.md).
 
-## Firmware version is not readable
+## Firmware version
 
-`bcdDevice` is hardcoded `0x0100` in `src/usbmsc.c` and the serial string is a
-constant, the DFU interface refuses uploads, and the app has no serial console.
-So the installed version genuinely cannot be read, and the UI says "unknown"
-rather than guessing. What it *can* tell is whether the DFU interface exists at
-all, which separates v0.9.2-and-later from everything before it.
+There is no serial console, so the descriptors are the only channel. Firmware
+from v0.9.3 derives `bcdDevice` from its own version (`0x0093` for v0.9.3,
+`FW_VERSION_BCD` in `src/board.h`) and the app decodes it.
 
-The fix is one line of firmware: derive `bcdDevice` from the release version
-(`0x0092` for v0.9.2). The app already decodes it when it is not the hardcoded
-default.
+Anything older reports the hardcoded `0x0100`, which carries no version at
+all, and the UI says "unknown" rather than guessing — along with why, because
+an unexplained "unknown" reads as a fault. The one thing it can still tell
+about an old board is whether the DFU interface exists, which separates
+v0.9.2 from everything before it. Installing the same release twice is
+harmless, so being unsure costs nothing.
 
 ## Testing against real clips
 
@@ -96,9 +97,12 @@ interesting adversarial input for the chunk walker.
 verifies each one against a pinned sha256. They are not committed: four
 platforms of ffmpeg is ~250 MB, which has no business in a firmware repo.
 
-Only **ffmpeg** is bundled today, and only the MP4 export uses it. Import,
-repair, join and playback are pure TypeScript, so a missing ffmpeg costs one
-optional feature rather than breaking the app.
+**ffmpeg** is the only one downloaded; `sunxi-fel` is built from source by
+`npm run build-fel` because no prebuilt exists for any platform this app
+ships to. Import, repair, join and playback use neither — they are pure
+TypeScript — so a missing tool costs one feature rather than the app.
+Settings lists what this build actually has, with the path it was found at,
+which is what explains a button that is not there.
 
 ## Join and export
 
@@ -167,6 +171,30 @@ Recovery writes U-Boot at NOR 0 and firmware at 1 MB, the layout
 `uboot/f1c200s_dvr_defconfig` boots from. It is the path for a board that
 cannot be reached any other way: blank flash, firmware older than the DFU
 interface, or an image that bricked the normal boot.
+
+## Settings
+
+Short on purpose. Three things there change what the app does, and each one
+exists because the right answer depends on the person rather than on the
+hardware:
+
+- **Library folder.** Choosing another starts a fresh index there; clips
+  already imported stay where they are.
+- **MP4 export.** Deinterlacing, on by default because the TVD feeds the
+  board interlaced analogue video, and a quality choice that maps to an x264
+  CRF. The middle setting is what every export used before it was a choice,
+  so an existing library keeps producing the files it already has.
+- **Gap between clips.** A clip that fills up rolls into the next with a gap
+  of exactly zero, and that is detected rather than assumed. A clip that
+  ended early ended on lost signal, and how long that lasted is recorded
+  nowhere — so six seconds is the firmware's floor, not a measurement, and
+  someone who knows their own flight can say better. No preference can move
+  the rollover case; that one is a fact about the recorder.
+
+The other two panels are not settings. Bundled tools says what this build
+has, which is the only thing a hidden button cannot explain for itself, and
+the licences panel carries the offer of corresponding source that shipping
+GPL binaries requires.
 
 ## Licence
 

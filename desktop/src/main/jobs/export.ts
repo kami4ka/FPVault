@@ -26,12 +26,21 @@ export interface ExportResult {
   shrink: number
 }
 
+export interface ExportOptions {
+  deinterlace: boolean
+  /** x264 constant rate factor: lower is better and larger. */
+  crf: number
+  preset: string
+}
+
+const DEFAULTS: ExportOptions = { deinterlace: true, crf: 20, preset: 'veryfast' }
+
 export async function exportSessionMp4(
   sessionId: string,
   label: string,
   store: Store,
   ctx: JobContext,
-  opts: { deinterlace: boolean } = { deinterlace: true }
+  opts: ExportOptions = DEFAULTS
 ): Promise<ExportResult> {
   const clips = store.clipsOf(sessionId)
   if (!clips.length) throw new Error('nothing to export')
@@ -65,8 +74,8 @@ export async function exportSessionMp4(
     '-i', listPath,
     '-map', '0:v',
     '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '20',
+    '-preset', opts.preset,
+    '-crf', String(opts.crf),
     '-pix_fmt', 'yuv420p',
     ...filters,
     '-r', String(fps),

@@ -206,6 +206,56 @@ export interface ReleaseInfo {
   hasFirmware: boolean
 }
 
+/* ---- preferences --------------------------------------------------------
+ * Only values a person has a real opinion about. Everything else that looks
+ * like a setting is either derived from the hardware or is a fact about the
+ * format, and making those adjustable would only invite someone to break
+ * their own footage.
+ */
+
+export type ExportQuality = 'high' | 'balanced' | 'small'
+
+export interface Prefs {
+  /** Library root. Null means the default under the user's videos folder. */
+  libraryRoot: string | null
+  /**
+   * The source is interlaced analogue video off the TVD, so deinterlacing is
+   * usually right — but it softens the picture, and anyone comparing output
+   * will want it off.
+   */
+  deinterlace: boolean
+  /** Maps to an x264 CRF and preset in main/settings.ts. */
+  quality: ExportQuality
+  /**
+   * Seconds assumed between two clips that did not end in a segment
+   * rollover. The firmware needs 5 s of lost signal to close a clip and 1 s
+   * of stable signal to open the next, so six is a floor rather than a
+   * measurement — someone who knows their own flight can say better.
+   */
+  gapSeconds: number
+}
+
+/** One bundled executable, as this build actually has it. */
+export interface BundledToolInfo {
+  id: 'ffmpeg' | 'sunxi-fel'
+  /** Resolved path, or null when this build does not have it. */
+  path: string | null
+  version: string | null
+  license: string
+  homepage: string
+  /** Where corresponding source can be obtained, for the GPL binaries. */
+  sourceUrl: string
+}
+
+export interface LicenceInfo {
+  id: string
+  name: string
+  version: string | null
+  license: string
+  homepage: string
+  sourceUrl: string | null
+}
+
 export interface Api {
   device: {
     get(): Promise<DeviceState>
@@ -250,9 +300,19 @@ export interface Api {
     canRecover(): Promise<boolean>
     recover(tag: string, withUboot: boolean): Promise<string>
   }
+  settings: {
+    get(): Promise<Prefs>
+    /** Everything but the library root, which moves via library.chooseRoot. */
+    set(patch: Partial<Omit<Prefs, 'libraryRoot'>>): Promise<Prefs>
+  }
   app: {
     versions(): Promise<{ app: string; electron: string; node: string; chrome: string }>
     /** False when ffmpeg was not bundled: the MP4 export is then unavailable. */
     canExport(): Promise<boolean>
+    /** What was bundled, so a missing button can be explained. */
+    tools(): Promise<BundledToolInfo[]>
+    licences(): Promise<LicenceInfo[]>
+    /** Open an https page in the system browser. */
+    openUrl(url: string): Promise<void>
   }
 }

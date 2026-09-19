@@ -8,17 +8,10 @@ import { JobBar, jobsForRoute } from './components/JobBar.js'
 import { Import } from './routes/Import.js'
 import { Library } from './routes/Library.js'
 import { Firmware } from './routes/Firmware.js'
+import { Settings } from './routes/Settings.js'
 import { BoardGuide } from './guidance/BoardGuide.js'
 import { detectLang, setLang as persistLang, strings, type Lang } from './i18n/index.js'
 import { useDevice } from './useDevice.js'
-
-function Placeholder({ title }: { title: string }) {
-  return (
-    <div className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-line)] p-10 text-center text-sm text-[var(--color-muted)]">
-      {title}
-    </div>
-  )
-}
 
 export function App() {
   const [route, setRoute] = useState<Route>('device')
@@ -125,7 +118,14 @@ export function App() {
           {route === 'import' && <Import device={state} jobs={jobs} s={s} />}
           {route === 'library' && <Library library={library} s={s} />}
           {route === 'firmware' && <Firmware device={state} s={s} />}
-          {route === 'settings' && <Placeholder title={s.nav.settings} />}
+          {route === 'settings' && (
+            <Settings
+              s={s}
+              lang={lang}
+              setLang={switchLang}
+              libraryRoot={library?.root ?? null}
+            />
+          )}
         </div>
       </main>
     </div>

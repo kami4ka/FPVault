@@ -50,4 +50,10 @@ esac
 
 cp sunxi-fel "$OUT/sunxi-fel"
 chmod 0755 "$OUT/sunxi-fel"
-echo "built $OUT/sunxi-fel"
+
+# sunxi-fel's own `version` command talks to a board, so the binary cannot
+# say what it is without one plugged in. Record the commit beside it instead;
+# the app reads this file for the licences panel.
+git -C "$WORK" rev-parse --short HEAD > "$OUT/sunxi-fel.version"
+
+echo "built $OUT/sunxi-fel ($(cat "$OUT/sunxi-fel.version"))"

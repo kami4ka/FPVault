@@ -51,9 +51,16 @@ const api: Api = {
     canRecover: () => ipcRenderer.invoke('firmware:canRecover'),
     recover: (tag, withUboot) => ipcRenderer.invoke('firmware:recover', tag, withUboot)
   },
+  settings: {
+    get: () => ipcRenderer.invoke('settings:get'),
+    set: (patch) => ipcRenderer.invoke('settings:set', patch)
+  },
   app: {
     versions: () => ipcRenderer.invoke('app:versions'),
-    canExport: () => ipcRenderer.invoke('app:canExport')
+    canExport: () => ipcRenderer.invoke('app:canExport'),
+    tools: () => ipcRenderer.invoke('app:tools'),
+    licences: () => ipcRenderer.invoke('app:licences'),
+    openUrl: (url) => ipcRenderer.invoke('app:openUrl', url)
   }
 }
 

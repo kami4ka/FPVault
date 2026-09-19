@@ -5,7 +5,9 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join, relative, resolve, sep } from 'node:path'
 import { defaultLibraryRoot } from './paths.js'
-import type { ExportFile, LibraryClipView, LibraryView } from '@shared/types'
+import { loadPrefs, prefs, savePrefs, QUALITY } from './settings.js'
+import { bundledTools, licences } from './tools/bundled.js'
+import type { ExportFile, LibraryClipView, LibraryView, Prefs } from '@shared/types'
 import type { DeviceWatcher } from './device/watcher.js'
 import { frameTable, readFrame, type FrameTable } from '@shared/avi/frames'
 import { readdir, stat } from 'node:fs/promises'
@@ -104,7 +106,9 @@ let exportsIndex = new Map<string, ExportFile[]>()
 function buildView(): LibraryView {
   const sessions = store.sessions().map((s) => {
     const clips = store.clipsOf(s.id)
-    const times = s.startUtc ? inferSessionTimes(clips, new Date(s.startUtc)) : []
+    const times = s.startUtc
+      ? inferSessionTimes(clips, new Date(s.startUtc), prefs().gapSeconds)
+      : []
     const timeById = new Map(times.map((t) => [t.id, t]))
 
     const view: LibraryClipView[] = clips.map((c) => {
@@ -160,7 +164,8 @@ function broadcast(channel: string, payload: unknown) {
 }
 
 export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
-  store = await Store.open(defaultLibraryRoot())
+  const saved = await loadPrefs()
+  store = await Store.open(saved.libraryRoot ?? defaultLibraryRoot())
   queue = new JobQueue()
   queue.on('change', (job) => broadcast('jobs:change', job))
 
@@ -194,7 +199,9 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
     const chosen = res.filePaths[0]
     if (!res.canceled && chosen) {
       store = await Store.open(chosen)
+      await savePrefs({ libraryRoot: chosen })
     }
+    await refreshExports()
     const view = buildView()
     broadcast('library:change', view)
     return view
@@ -281,8 +288,14 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
     const session = store.sessions().find((x) => x.id === sessionId)
     if (!session) throw new Error(`no such session: ${sessionId}`)
     const label = sessionLabel(session.dcfDir, session.startUtc)
+    const p = prefs()
+    const q = QUALITY[p.quality]
     return queue.add('export', `${label} (MP4)`, async (ctx) => {
-      const res = await exportSessionMp4(sessionId, label, store, ctx)
+      const res = await exportSessionMp4(sessionId, label, store, ctx, {
+        deinterlace: p.deinterlace,
+        crf: q.crf,
+        preset: q.preset
+      })
       await store.addExport(sessionId, relative(store.root, res.output))
       await publishLibrary()
       return res
@@ -311,6 +324,21 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
     queue.add('recover', `Recovery ${tag}`, (ctx) => recoverOverFel(tag, withUboot, ctx))
   )
 
+  /* ---- settings ---- */
+  ipcMain.handle('settings:get', () => loadPrefs())
+  ipcMain.handle('settings:set', async (_e, patch: Partial<Prefs>) => {
+    const before = prefs().gapSeconds
+    /* The library root moves through library:chooseRoot, which has to open
+     * the new store as well as remember it; accepting it here too would let
+     * the renderer point the store somewhere without that happening. */
+    const { libraryRoot: _ignored, ...rest } = patch
+    const next = await savePrefs(rest)
+    /* Timestamps are derived, so a changed gap changes every session that
+     * has a start time. Republish rather than make the user reopen a tab. */
+    if (next.gapSeconds !== before) await publishLibrary()
+    return next
+  })
+
   /* ---- app ---- */
   ipcMain.handle('app:canExport', () => ffmpegAvailable())
   ipcMain.handle('app:versions', () => ({
@@ -319,6 +347,14 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
     node: process.versions.node,
     chrome: process.versions.chrome
   }))
+  ipcMain.handle('app:tools', () => bundledTools())
+  ipcMain.handle('app:licences', () => licences(app.getVersion()))
+  /* Only ever a web page, and only ever https: this hands a string to the
+   * OS, so a file: or a custom scheme would be someone else's program. */
+  ipcMain.handle('app:openUrl', (_e, url: string) => {
+    if (!/^https:\/\//i.test(url)) throw new Error(`refusing to open: ${url}`)
+    return shell.openExternal(url)
+  })
 
   watcher.on('change', (state) => broadcast('device:change', state))
 }

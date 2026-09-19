@@ -80,6 +80,21 @@ describe('timestamp inference', () => {
     expect(last / 1000).toBeCloseTo(600.6, 1) /* two full segments */
   })
 
+  it('honours a user-set gap for the uncertain case only', () => {
+    /* Settings lets someone who knows their own flight say more than the
+     * firmware's floor. A rollover is still exactly zero: it is a fact
+     * about the recorder, not a guess, so no preference may move it. */
+    const clips = [clip('a', 3000, 1), clip('b', 3000, 2), clip('c', REC_SEG_FRAMES, 3)]
+    const times = inferSessionTimes(clips, start, 45)
+
+    expect(times[1]?.gapBeforeSec).toBe(45)
+    expect(times[1]?.gapUncertain).toBe(true)
+    expect(times[2]?.gapBeforeSec).toBe(45)
+
+    const rolled = inferSessionTimes([clip('a', REC_SEG_FRAMES, 1), clip('b', 10, 2)], start, 45)
+    expect(rolled[1]?.gapBeforeSec).toBe(0)
+  })
+
   it('guesses a start that ends the session about now', () => {
     const clips = [clip('a', REC_SEG_FRAMES, 1), clip('b', REC_SEG_FRAMES, 2)]
     const now = new Date('2026-09-18T15:00:00.000Z')

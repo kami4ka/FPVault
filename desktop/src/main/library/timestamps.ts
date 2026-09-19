@@ -43,8 +43,16 @@ export interface TimedClip {
 /**
  * Place every clip in a session on the clock, given when the session began.
  * Clips must be in DCF index order; the caller gets that from the store.
+ *
+ * `gapSec` is what to assume for a gap that was not a segment rollover.
+ * Six is the floor the firmware imposes, not a measurement, so someone who
+ * knows their own flight can say better in Settings.
  */
-export function inferSessionTimes(clips: LibraryClip[], sessionStart: Date): TimedClip[] {
+export function inferSessionTimes(
+  clips: LibraryClip[],
+  sessionStart: Date,
+  gapSec: number = UNKNOWN_GAP_SEC
+): TimedClip[] {
   const out: TimedClip[] = []
   let cursor = sessionStart.getTime()
 
@@ -57,7 +65,7 @@ export function inferSessionTimes(clips: LibraryClip[], sessionStart: Date): Tim
       /* An exact segment rollover closes and reopens in the same tick. */
       const rolledOver = prev?.frames === REC_SEG_FRAMES
       if (!rolledOver) {
-        gapBeforeSec = UNKNOWN_GAP_SEC
+        gapBeforeSec = gapSec
         gapUncertain = true
       }
       cursor += gapBeforeSec * 1000
@@ -84,12 +92,16 @@ export function inferSessionTimes(clips: LibraryClip[], sessionStart: Date): Tim
  * after landing, the session ended at about now, so it began one total
  * duration ago.
  */
-export function guessSessionStart(clips: LibraryClip[], now = new Date()): Date {
+export function guessSessionStart(
+  clips: LibraryClip[],
+  now = new Date(),
+  gapSec: number = UNKNOWN_GAP_SEC
+): Date {
   let seconds = 0
   for (const [i, clip] of clips.entries()) {
     const fps = clip.scale ? clip.rate / clip.scale : 0
     if (fps) seconds += clip.frames / fps
-    if (i > 0 && clips[i - 1]?.frames !== REC_SEG_FRAMES) seconds += UNKNOWN_GAP_SEC
+    if (i > 0 && clips[i - 1]?.frames !== REC_SEG_FRAMES) seconds += gapSec
   }
   return new Date(now.getTime() - seconds * 1000)
 }
