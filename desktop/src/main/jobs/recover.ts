@@ -14,9 +14,8 @@
  * proven tool is the right answer on a recovery route.
  */
 import { spawn } from 'node:child_process'
-import { app } from 'electron'
-import { join } from 'node:path'
 import { resolveBin } from '../tools/resolveBin.js'
+import { firmwareDir } from '../paths.js'
 import { downloadAsset, listReleases, type Release } from '../update/releases.js'
 import { validateImage } from '../update/dfu.js'
 import type { JobContext } from './queue.js'
@@ -114,7 +113,7 @@ export async function recoverOverFel(
     )
   ctx.report(0.02, ver)
 
-  const dir = join(app.getPath('userData'), 'firmware')
+  const dir = firmwareDir()
 
   /* U-Boot is 414,840 bytes against the firmware's 80,096, so it dominates
    * the time; weight the bar accordingly rather than showing two bars. */

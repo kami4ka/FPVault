@@ -2,9 +2,8 @@
  *
  * Installing a firmware release on a connected board.
  */
-import { app } from 'electron'
-import { join } from 'node:path'
 import { dfuDownload, validateImage } from '../update/dfu.js'
+import { firmwareDir } from '../paths.js'
 import { downloadAsset, listReleases, type Release } from '../update/releases.js'
 import type { JobContext } from './queue.js'
 
@@ -13,10 +12,6 @@ const KB = 1024
 export interface FlashResult {
   tag: string
   bytes: number
-}
-
-function firmwareDir(): string {
-  return join(app.getPath('userData'), 'firmware')
 }
 
 function findImage(release: Release) {

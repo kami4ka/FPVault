@@ -4,6 +4,7 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join, resolve, sep } from 'node:path'
+import { defaultLibraryRoot } from './paths.js'
 import type { LibraryClipView, LibraryView } from '@shared/types'
 import type { DeviceWatcher } from './device/watcher.js'
 import { frameTable, readFrame, type FrameTable } from '@shared/avi/frames'
@@ -88,8 +89,7 @@ function broadcast(channel: string, payload: unknown) {
 }
 
 export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
-  const defaultRoot = join(app.getPath('videos'), 'FPVault')
-  store = await Store.open(defaultRoot)
+  store = await Store.open(defaultLibraryRoot())
   queue = new JobQueue()
   queue.on('change', (job) => broadcast('jobs:change', job))
 
