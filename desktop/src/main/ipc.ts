@@ -17,6 +17,7 @@ import { ffmpegAvailable } from './tools/ffmpeg.js'
 import { flashRelease } from './jobs/firmware.js'
 import { dfuAvailable } from './update/dfu.js'
 import { listReleases } from './update/releases.js'
+import { felAvailable, recoverOverFel } from './jobs/recover.js'
 import { JobQueue } from './jobs/queue.js'
 
 let store: Store
@@ -220,6 +221,11 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
   ipcMain.handle('firmware:canFlash', () => dfuAvailable())
   ipcMain.handle('firmware:flash', (_e, tag: string) =>
     queue.add('firmware', `Firmware ${tag}`, (ctx) => flashRelease(tag, ctx))
+  )
+
+  ipcMain.handle('firmware:canRecover', () => felAvailable())
+  ipcMain.handle('firmware:recover', (_e, tag: string, withUboot: boolean) =>
+    queue.add('recover', `Recovery ${tag}`, (ctx) => recoverOverFel(tag, withUboot, ctx))
   )
 
   /* ---- app ---- */

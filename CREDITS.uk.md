@@ -52,6 +52,12 @@
   й відтворення — чистий TypeScript.
 - **[x264](https://www.videolan.org/developers/x264.html)** (GPL-2.0-or-later)
   — усередині тієї збірки FFmpeg; саме він робить можливим експорт у MP4.
+- **[sunxi-tools](https://github.com/linux-sunxi/sunxi-tools)** (GPL-2.0-or-later)
+  — `sunxi-fel` вкладено для відновлення через FEL; збирається із
+  зафіксованого коміту скриптом `desktop/scripts/build-sunxi-fel.sh` і
+  лінкується статично з libusb (LGPL-2.1-or-later), libfdt
+  (BSD-2-Clause/GPL-2.0) та zlib. Готових збірок немає для жодної платформи,
+  на яку йде застосунок, — тому він збирається, а не завантажується.
 - **[Electron](https://electronjs.org/)** (MIT), **Chromium** (BSD-3-Clause),
   **[Node.js](https://nodejs.org/)** (MIT), **[React](https://react.dev/)**
   (MIT), **[Vite](https://vite.dev/)** (MIT),

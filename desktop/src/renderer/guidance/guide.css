@@ -1,0 +1,134 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Board artwork styling. Flat fills, no gradients, no shadows — the same
+ * rules the hand-written SVGs in docs/img follow.
+ */
+
+.board-art .pcb {
+  fill: #14532d;
+  stroke: #0f3d22;
+  stroke-width: 2;
+}
+
+.board-art .hole {
+  fill: var(--color-canvas);
+  stroke: #b9c2c9;
+  stroke-width: 3;
+}
+
+.board-art .chip {
+  fill: #11161b;
+}
+.board-art .metal {
+  fill: #9aa5ae;
+}
+.board-art .slot {
+  fill: #2b333c;
+}
+.board-art .switch {
+  fill: #d8dde2;
+}
+.board-art .plunger {
+  fill: #f4f6f8;
+  stroke: #aeb6bd;
+  stroke-width: 1.5;
+}
+.board-art .passive {
+  fill: #c6ccd2;
+}
+.board-art .socket {
+  fill: #1d242b;
+  stroke: #3a444e;
+  stroke-width: 1.5;
+}
+.board-art .pad {
+  fill: #c9a227;
+}
+.board-art .led {
+  fill: var(--color-record);
+}
+
+.board-art text {
+  font-family: var(--font-mono);
+  fill: #9fb3a6;
+  text-anchor: middle;
+}
+.board-art .ref {
+  font-size: 13px;
+}
+.board-art .socLabel {
+  font-size: 15px;
+  font-weight: 600;
+  fill: #8d99a4;
+}
+.board-art .socketLabel {
+  font-size: 11px;
+  fill: #7d8b95;
+}
+.board-art .padLabel {
+  font-size: 11px;
+  fill: #b7c3bb;
+}
+
+/* A highlighted part lifts out of the board in the brand cyan and pulses
+ * gently, so the eye lands on it without the whole diagram moving. */
+.board-art .part {
+  transition:
+    opacity 220ms ease,
+    filter 220ms ease;
+  opacity: 0.55;
+}
+.board-art .part.hi {
+  opacity: 1;
+}
+.board-art .part.hi .metal,
+.board-art .part.hi .switch,
+.board-art .part.hi .plunger,
+.board-art .part.hi .chip,
+.board-art .part.hi .socket,
+.board-art .part.hi .pad,
+.board-art .part.hi .led {
+  fill: var(--color-brand);
+}
+.board-art .part.hi text {
+  fill: var(--color-brand);
+}
+
+/* The sustained press on SW2: two rings, offset, so it reads as "hold"
+ * rather than "tap". */
+.board-art .press-ring {
+  fill: none;
+  stroke: var(--color-record);
+  stroke-width: 2.5;
+  transform-origin: 269px 72px;
+  animation: press-pulse 1.6s ease-out infinite;
+}
+.board-art .press-ring.delay {
+  animation-delay: 0.55s;
+  stroke-width: 1.5;
+}
+
+@keyframes press-pulse {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.72);
+  }
+  70% {
+    opacity: 0.12;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-art .press-ring {
+    animation: none;
+    opacity: 0.6;
+  }
+  .board-art .part {
+    transition: none;
+  }
+}

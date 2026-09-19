@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "fetch-binaries": "node scripts/fetch-binaries.mjs",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "build-fel": "bash scripts/build-sunxi-fel.sh"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

@@ -84,6 +84,8 @@ export const en = {
 ,
   firmwareScreen: {
     releases: 'Releases',
+    recovery: 'Recovery mode',
+    recoverWith: (tag: string) => `Recover with ${tag}`,
     check: 'Check now',
     newest: 'newest',
     prerelease: 'pre-release',
@@ -111,6 +113,37 @@ export const en = {
       title: 'No board connected',
       body: 'Plug the board in to install firmware. Releases can still be browsed without one.'
     }
+  },
+  guide: {
+    progress: 'Step',
+    plugTitle: 'Plug the board into this computer',
+    plugSub: 'USB-C, any port. Use a cable you know carries data, not a charging cable.',
+    onlyPowerTitle: 'USB has to be its only power',
+    onlyPowerSub: 'Disconnect the flight battery and anything on the 5V_IN pad. With another supply present the board never looks for a computer.',
+    windowTitle: 'The board decides in its first two and a half seconds',
+    windowSub: 'At power-on it looks for a computer, and whatever it finds it stays until the next replug. It cannot be switched over afterwards.',
+    replugTitle: 'Already plugged in? Unplug it, count to five, plug it back in',
+    replugSub: 'There is a bulk capacitor at the card socket, so a quick replug may not actually power the card down. Give it five seconds.',
+    cableTitle: 'Still nothing? Try a different cable',
+    cableSub: 'Plenty of USB-C cables carry power only. A charge-only cable looks identical and never enumerates.',
+
+    felUnplugTitle: 'Unplug the board',
+    felUnplugSub: 'Recovery starts from no power at all, so take the cable out first.',
+    felHoldTitle: 'Press and hold SW2',
+    felHoldSub: 'The small button beside the USB connector, top right. SW1 on the left edge is reset — not that one.',
+    felPlugTitle: 'Keep holding SW2 and plug the USB back in',
+    felPlugSub: 'This is the part that catches people out: the button has to be down before power arrives and stay down as it does.',
+    felReleaseTitle: 'Let go of SW2',
+    felReleaseSub: 'Recovery mode detected. SW2 only blinds the boot ROM while it looks for flash — the flash itself is untouched.',
+    felMissedTitle: 'That was a normal boot',
+    felMissedSub: 'SW2 was probably released too early, or was not down when power arrived. Let us try again.',
+
+    afterRebootTitle: 'The board is restarting into the new firmware',
+    afterRebootSub: 'It wrote its flash, read it back and compared before rebooting itself.',
+    afterBackTitle: 'It should come back as a card reader in about five seconds',
+    afterBackSub: 'Watch the LED: a fast blink means it has enumerated and handed the card over.',
+    afterReplugTitle: 'It did not come back — unplug, wait five seconds, plug in again',
+    afterReplugSub: 'If it still does not appear, recovery over FEL will reflash it from scratch.'
   },
   player: {
     close: 'Close',

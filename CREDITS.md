@@ -51,6 +51,12 @@ them at build time against the sha256 digests pinned in
   pure TypeScript.
 - **[x264](https://www.videolan.org/developers/x264.html)** (GPL-2.0-or-later)
   — inside that FFmpeg build; it is what makes the MP4 export possible.
+- **[sunxi-tools](https://github.com/linux-sunxi/sunxi-tools)** (GPL-2.0-or-later)
+  — `sunxi-fel` is bundled for FEL recovery, built from a pinned commit by
+  `desktop/scripts/build-sunxi-fel.sh` and linked statically against libusb
+  (LGPL-2.1-or-later), libfdt (BSD-2-Clause/GPL-2.0) and zlib. No prebuilt
+  exists for any platform the app ships to, which is why it is built rather
+  than downloaded.
 - **[Electron](https://electronjs.org/)** (MIT), **Chromium** (BSD-3-Clause),
   **[Node.js](https://nodejs.org/)** (MIT), **[React](https://react.dev/)**
   (MIT), **[Vite](https://vite.dev/)** (MIT),

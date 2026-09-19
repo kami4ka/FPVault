@@ -10,6 +10,7 @@
  */
 import { useEffect, useState } from 'react'
 import type { DeviceState, ReleaseInfo } from '@shared/types'
+import { BoardGuide } from '../guidance/BoardGuide.js'
 import type { Strings } from '../i18n/index.js'
 
 function Capability({ device, s }: { device: DeviceState; s: Strings }) {
@@ -67,6 +68,8 @@ export function Firmware({ device, s }: { device: DeviceState; s: Strings }) {
   const [error, setError] = useState<string | null>(null)
   const [canFlash, setCanFlash] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [showFel, setShowFel] = useState(false)
+  const [canRecover, setCanRecover] = useState(false)
 
   const load = (force = false) => {
     setBusy(true)
@@ -81,13 +84,22 @@ export function Firmware({ device, s }: { device: DeviceState; s: Strings }) {
   useEffect(() => {
     load()
     void window.fpvault.firmware.canFlash().then(setCanFlash)
+    void window.fpvault.firmware.canRecover().then(setCanRecover)
   }, [])
 
   const flashable = device.kind === 'reader' && canFlash
+  /* A board with no DFU interface cannot be updated over USB at all; it
+   * needs one trip through the boot ROM's recovery mode first. */
+  const needsFel = device.kind === 'legacy'
+  const inFel = device.kind === 'fel'
 
   return (
     <div className="space-y-4">
       <Capability device={device} s={s} />
+
+      {(needsFel || showFel) && (
+        <BoardGuide sequence="enterFel" device={device} s={s} />
+      )}
 
       <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)]">
         <header className="flex items-center justify-between border-b border-[var(--color-line)] px-4 py-3">
@@ -121,15 +133,26 @@ export function Firmware({ device, s }: { device: DeviceState; s: Strings }) {
                 </span>
               )}
               <span className="flex-1" />
-              <button
-                type="button"
-                disabled={!flashable || !r.hasFirmware}
-                onClick={() => void window.fpvault.firmware.flash(r.tag)}
-                className="rounded-[var(--radius-card)] bg-[var(--color-record)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-35"
-                title={flashable ? undefined : s.firmwareScreen.cannotFlash}
-              >
-                {s.firmwareScreen.install(r.tag)}
-              </button>
+              {inFel ? (
+                <button
+                  type="button"
+                  disabled={!canRecover || !r.hasFirmware}
+                  onClick={() => void window.fpvault.firmware.recover(r.tag, true)}
+                  className="rounded-[var(--radius-card)] bg-[var(--color-busy)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-35"
+                >
+                  {s.firmwareScreen.recoverWith(r.tag)}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!flashable || !r.hasFirmware}
+                  onClick={() => void window.fpvault.firmware.flash(r.tag)}
+                  className="rounded-[var(--radius-card)] bg-[var(--color-record)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-35"
+                  title={flashable ? undefined : s.firmwareScreen.cannotFlash}
+                >
+                  {s.firmwareScreen.install(r.tag)}
+                </button>
+              )}
             </div>
             <p className="mt-1 text-xs text-[var(--color-muted)]">{r.name}</p>
           </article>
@@ -142,9 +165,18 @@ export function Firmware({ device, s }: { device: DeviceState; s: Strings }) {
         )}
       </section>
 
-      <p className="text-[11px] leading-relaxed text-[var(--color-muted)]">
-        {s.firmwareScreen.safetyNote}
-      </p>
+      <div className="flex items-baseline gap-3">
+        <p className="flex-1 text-[11px] leading-relaxed text-[var(--color-muted)]">
+          {s.firmwareScreen.safetyNote}
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowFel((v) => !v)}
+          className="shrink-0 rounded px-2 py-1 text-xs text-[var(--color-busy)] hover:underline"
+        >
+          {s.firmwareScreen.recovery}
+        </button>
+      </div>
     </div>
   )
 }

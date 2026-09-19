@@ -46,7 +46,9 @@ const api: Api = {
   firmware: {
     releases: (force) => ipcRenderer.invoke('firmware:releases', force),
     canFlash: () => ipcRenderer.invoke('firmware:canFlash'),
-    flash: (tag) => ipcRenderer.invoke('firmware:flash', tag)
+    flash: (tag) => ipcRenderer.invoke('firmware:flash', tag),
+    canRecover: () => ipcRenderer.invoke('firmware:canRecover'),
+    recover: (tag, withUboot) => ipcRenderer.invoke('firmware:recover', tag, withUboot)
   },
   app: {
     versions: () => ipcRenderer.invoke('app:versions'),

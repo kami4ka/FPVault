@@ -142,6 +142,32 @@ Nothing reaches the flash until the whole image has arrived and the board
 has checked it, so a cable pulled mid-transfer is harmless. Measured on a
 real board: 80,096 bytes sent, burnt, verified and rebooted in 0.5 s.
 
+## Recovery and guidance
+
+`BoardGuide` animates the things that need hands on the board, drawn from
+`docs/img/board-v1.jpg` in the same flat SVG style as `docs/img/pipeline.svg`.
+What makes it better than a recording is that steps advance on the live
+device state: hold SW2 and plug in, and the moment the app sees the boot ROM
+the caption moves on to "release it" by itself. Under
+`prefers-reduced-motion` it becomes a numbered list of the same captions.
+
+Three sequences: board not detected, entering FEL, and the replug after an
+update. Two of the "not detected" steps carry facts a user cannot guess —
+the board decides its mode in the first 2.5 s of power, and the bulk
+capacitor at the card socket means a quick replug may not power the card
+down at all.
+
+FEL recovery uses `sunxi-fel`, built from a pinned commit by
+`npm run build-fel` rather than downloaded: no prebuilt exists for any
+platform this app ships to. It is linked fully statically (libusb, libfdt
+and zlib), which is both what makes it portable and what keeps macOS
+notarization simple — 225 KB with no non-system dependencies.
+
+Recovery writes U-Boot at NOR 0 and firmware at 1 MB, the layout
+`uboot/f1c200s_dvr_defconfig` boots from. It is the path for a board that
+cannot be reached any other way: blank flash, firmware older than the DFU
+interface, or an image that bricked the normal boot.
+
 ## Licence
 
 GPL-3.0-or-later, like the firmware. Bundled tools keep their own licences;

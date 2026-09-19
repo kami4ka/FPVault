@@ -117,7 +117,7 @@ export interface FrameIndex {
 /** Mirrors main/jobs/queue.ts; duplicated here to keep this file import-free. */
 export interface JobState {
   id: string
-  kind: 'import' | 'repair' | 'join' | 'export' | 'firmware'
+  kind: 'import' | 'repair' | 'join' | 'export' | 'firmware' | 'recover'
   label: string
   phase: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
   progress: number | null
@@ -229,6 +229,9 @@ export interface Api {
     /** False when USB access is unavailable: offer FEL instead. */
     canFlash(): Promise<boolean>
     flash(tag: string): Promise<string>
+    /** FEL recovery: writes flash through the boot ROM. */
+    canRecover(): Promise<boolean>
+    recover(tag: string, withUboot: boolean): Promise<string>
   }
   app: {
     versions(): Promise<{ app: string; electron: string; node: string; chrome: string }>

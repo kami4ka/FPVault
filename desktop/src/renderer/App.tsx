@@ -8,6 +8,7 @@ import { JobBar } from './components/JobBar.js'
 import { Import } from './routes/Import.js'
 import { Library } from './routes/Library.js'
 import { Firmware } from './routes/Firmware.js'
+import { BoardGuide } from './guidance/BoardGuide.js'
 import { detectLang, setLang as persistLang, strings, type Lang } from './i18n/index.js'
 import { useDevice } from './useDevice.js'
 
@@ -25,6 +26,7 @@ export function App() {
   const { state, rescan, busy } = useDevice()
   const s = useMemo(() => strings(lang), [lang])
 
+  const [help, setHelp] = useState(false)
   const [library, setLibrary] = useState<LibraryView | null>(null)
   const [jobs, setJobs] = useState<JobState[]>([])
 
@@ -77,7 +79,16 @@ export function App() {
           <JobBar jobs={jobs} s={s} />
           {route === 'device' && (
             <>
-              <StatusCard state={state} s={s} onAction={() => setRoute('import')} />
+              <StatusCard
+                state={state}
+                s={s}
+                onAction={() => (state.kind === 'absent' ? setHelp(true) : setRoute('import'))}
+              />
+              {(help || state.kind === 'absent') && (
+                <div className="mt-4">
+                  <BoardGuide sequence="notDetected" device={state} s={s} />
+                </div>
+              )}
               <TaskTiles
                 state={state}
                 s={s}
