@@ -1,10 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Running work, wherever you are in the app. Import and join both take
- * minutes on a full card, so the progress has to follow the user between
- * screens rather than live on the one that started it.
+ * Running work, shown on the screen that owns it.
+ *
+ * A firmware write has no business taking up space above the clip library,
+ * so each job kind belongs to one route and appears only there. And a job
+ * that has finished says so for a few seconds and then gets out of the way
+ * — except a failure, which stays until it is dismissed, because the error
+ * text is the whole point of it.
  */
 import type { JobState } from '@shared/types'
+import type { Route } from './DeviceRail.js'
 import type { Strings } from '../i18n/index.js'
 
 const BAR: Record<JobState['phase'], string> = {
@@ -15,10 +20,32 @@ const BAR: Record<JobState['phase'], string> = {
   cancelled: 'var(--color-muted)'
 }
 
-export function JobBar({ jobs, s }: { jobs: JobState[]; s: Strings }) {
-  /* Finished jobs stay until something new starts, so the last result is
-   * still readable; anything older than the current batch is dropped. */
-  const shown = jobs.slice(-4)
+/** Which screen each kind of work belongs to. */
+const HOME: Record<JobState['kind'], Route> = {
+  import: 'import',
+  repair: 'library',
+  join: 'library',
+  export: 'library',
+  firmware: 'firmware',
+  recover: 'firmware'
+}
+
+export function jobsForRoute(jobs: JobState[], route: Route): JobState[] {
+  return jobs.filter((j) => HOME[j.kind] === route)
+}
+
+export function JobBar({
+  jobs,
+  route,
+  s,
+  onDismiss
+}: {
+  jobs: JobState[]
+  route: Route
+  s: Strings
+  onDismiss: (id: string) => void
+}) {
+  const shown = jobsForRoute(jobs, route).slice(-4)
   if (!shown.length) return null
 
   return (
@@ -29,13 +56,22 @@ export function JobBar({ jobs, s }: { jobs: JobState[]; s: Strings }) {
             <div className="flex items-baseline justify-between gap-3 text-xs">
               <span className="font-semibold">{job.label}</span>
               <span className="text-[var(--color-muted)]">{s.jobPhase[job.phase]}</span>
-              {job.phase === 'running' && (
+              {job.phase === 'running' ? (
                 <button
                   type="button"
                   onClick={() => void window.fpvault.jobs.cancel(job.id)}
                   className="text-[var(--color-muted)] hover:text-[var(--color-record)]"
                 >
                   {s.common.cancel}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onDismiss(job.id)}
+                  aria-label={s.common.dismiss}
+                  className="text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                >
+                  ×
                 </button>
               )}
             </div>

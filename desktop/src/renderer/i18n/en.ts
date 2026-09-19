@@ -168,6 +168,7 @@ export const en = {
   common: {
     rescan: 'Rescan',
     cancel: 'Cancel',
+    dismiss: 'Dismiss',
     unknown: 'unknown'
   }
 }

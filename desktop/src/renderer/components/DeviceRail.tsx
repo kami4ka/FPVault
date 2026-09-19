@@ -31,12 +31,16 @@ function Item({
   label,
   active,
   onClick,
-  dot
+  dot,
+  busy
 }: {
   label: string
   active: boolean
   onClick: () => void
   dot?: string
+  /** Work is running on this screen; shown so scoping the progress bar to
+   * one screen does not make a long job feel like it vanished. */
+  busy?: boolean
 }) {
   return (
     <button
@@ -55,6 +59,12 @@ function Item({
         <span className="h-2 w-2 shrink-0" aria-hidden />
       )}
       <span className="truncate">{label}</span>
+      {busy && (
+        <span
+          className="dot-live ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-brand)]"
+          aria-hidden
+        />
+      )}
     </button>
   )
 }
@@ -65,7 +75,8 @@ export function DeviceRail({
   state,
   s,
   lang,
-  setLang
+  setLang,
+  busyRoutes
 }: {
   route: Route
   setRoute: (r: Route) => void
@@ -73,6 +84,7 @@ export function DeviceRail({
   s: Strings
   lang: Lang
   setLang: (l: Lang) => void
+  busyRoutes: Set<Route>
 }) {
   return (
     <nav className="drag flex h-full w-56 shrink-0 flex-col border-r border-[var(--color-line)] bg-[var(--color-surface)]">
@@ -86,12 +98,23 @@ export function DeviceRail({
           onClick={() => setRoute('device')}
           dot={DOT[state.kind]}
         />
-        <Item label={s.nav.import} active={route === 'import'} onClick={() => setRoute('import')} />
-        <Item label={s.nav.library} active={route === 'library'} onClick={() => setRoute('library')} />
+        <Item
+          label={s.nav.import}
+          active={route === 'import'}
+          onClick={() => setRoute('import')}
+          busy={busyRoutes.has('import')}
+        />
+        <Item
+          label={s.nav.library}
+          active={route === 'library'}
+          onClick={() => setRoute('library')}
+          busy={busyRoutes.has('library')}
+        />
         <Item
           label={s.nav.firmware}
           active={route === 'firmware'}
           onClick={() => setRoute('firmware')}
+          busy={busyRoutes.has('firmware')}
         />
         <Item
           label={s.nav.settings}

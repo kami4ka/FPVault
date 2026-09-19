@@ -182,6 +182,7 @@ export const uk: typeof en = {
   common: {
     rescan: 'Пересканувати',
     cancel: 'Скасувати',
+    dismiss: 'Прибрати',
     unknown: 'невідомо'
   }
 }

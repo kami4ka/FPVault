@@ -4,7 +4,7 @@ import type { JobState, LibraryView } from '@shared/types'
 import { DeviceRail, type Route } from './components/DeviceRail.js'
 import { StatusCard } from './components/StatusCard.js'
 import { TaskTiles } from './components/TaskTiles.js'
-import { JobBar } from './components/JobBar.js'
+import { JobBar, jobsForRoute } from './components/JobBar.js'
 import { Import } from './routes/Import.js'
 import { Library } from './routes/Library.js'
 import { Firmware } from './routes/Firmware.js'
@@ -30,6 +30,8 @@ export function App() {
   const [library, setLibrary] = useState<LibraryView | null>(null)
   const [jobs, setJobs] = useState<JobState[]>([])
 
+  const dismiss = (id: string) => setJobs((prev) => prev.filter((j) => j.id !== id))
+
   useEffect(() => {
     void window.fpvault.library.get().then(setLibrary)
     void window.fpvault.jobs.list().then(setJobs)
@@ -47,6 +49,25 @@ export function App() {
     }
   }, [])
 
+  /* Work that finished well reports itself briefly and then gives the space
+   * back. A failure stays: its message is the reason it exists. */
+  useEffect(() => {
+    const spent = jobs.filter((j) => j.phase === 'done' || j.phase === 'cancelled')
+    if (!spent.length) return
+    const timers = spent.map((j) => setTimeout(() => dismiss(j.id), 6000))
+    return () => timers.forEach(clearTimeout)
+  }, [jobs])
+
+  /* Which screens have work in flight, so the rail can say so. */
+  const busyRoutes = useMemo(() => {
+    const routes: Route[] = ['import', 'library', 'firmware']
+    return new Set(
+      routes.filter((r) =>
+        jobsForRoute(jobs, r).some((j) => j.phase === 'running' || j.phase === 'queued')
+      )
+    )
+  }, [jobs])
+
   const switchLang = (l: Lang) => {
     persistLang(l)
     setLangState(l)
@@ -61,6 +82,7 @@ export function App() {
         s={s}
         lang={lang}
         setLang={switchLang}
+        busyRoutes={busyRoutes}
       />
 
       <main className="flex-1 overflow-y-auto">
@@ -76,7 +98,7 @@ export function App() {
         </header>
 
         <div className="mx-auto max-w-4xl px-6 pb-10">
-          <JobBar jobs={jobs} s={s} />
+          <JobBar jobs={jobs} route={route} s={s} onDismiss={dismiss} />
           {route === 'device' && (
             <>
               <StatusCard
