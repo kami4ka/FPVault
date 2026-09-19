@@ -79,12 +79,14 @@ export async function probe(): Promise<UsbSnapshot> {
 
     snap.board = true
     if (n.bInterfaceClass === DFU_CLASS) snap.dfuCapable = true
-    if (n.bcdDevice !== undefined && snap.firmware.bcdDevice === 0) {
+    if (n.bcdDevice !== undefined && snap.firmware.bcdDevice === 0)
       snap.firmware.bcdDevice = n.bcdDevice
-      snap.firmware.version = decodeVersion(n.bcdDevice)
-    }
     if (n.serial && !snap.firmware.serial) snap.firmware.serial = n.serial
   }
+
+  /* Decoding needs the DFU answer, so it happens once the whole scan is in:
+   * the legacy sentinel 0x0100 is only unambiguous alongside it. */
+  snap.firmware.version = decodeVersion(snap.firmware.bcdDevice, snap.dfuCapable)
 
   /* A FEL device has no driver, so it may not surface as an interface node.
    * Fall back to the device-level tree only when nothing was found, so the

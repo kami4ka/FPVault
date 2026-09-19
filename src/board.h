@@ -15,6 +15,29 @@
 /* ---- identity ----------------------------------------------------------- */
 #define BOARD_NAME "FPVault"
 
+/* Firmware version, and the one place to bump it for a release.
+ *
+ * It is also what the USB device descriptor reports as bcdDevice, which is
+ * the only channel a host has for learning which firmware a board runs: the
+ * banner below goes to UART0, DFU refuses uploads so the flash cannot be
+ * read back, and nothing is ever written to the card but video. Every host
+ * OS exposes bcdDevice with no driver and no permissions, so encoding it
+ * there costs nothing and makes the desktop app able to say what is
+ * installed instead of "unknown".
+ *
+ * Encoding is the conventional BCD-ish nibble layout: 0x0092 reads as
+ * 0.9.2. Firmware older than this reported a hardcoded 0x0100, so a host
+ * seeing that value learns nothing - see the note in usbmsc.c.
+ */
+#define FW_VERSION_MAJOR 0
+#define FW_VERSION_MINOR 9
+#define FW_VERSION_PATCH 3
+
+#define FW_VERSION_BCD                                                        \
+    ((FW_VERSION_MAJOR << 8) | (FW_VERSION_MINOR << 4) | FW_VERSION_PATCH)
+
+#define FW_VERSION_STR "0.9.3"
+
 /* ---- DRAM map (64 MB, flat MMU, virt == phys) ---------------------------
  *
  * 0x8000_0000  firmware: text/data/bss/heap/stacks           (cacheable)

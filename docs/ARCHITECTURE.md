@@ -125,3 +125,22 @@ has read dfuMANIFEST-WAIT-RESET so dfu-util exits clean, and resets via
 the watchdog with a "requested reboot" breadcrumb. Port fix that made it
 work: the musb EP0 OUT data stage only completed on a short packet,
 which a 4096-byte block never produces.
+
+## Reporting the firmware version
+
+`bcdDevice` in the USB device descriptor carries the firmware version from
+v0.9.3 onwards (`src/board.h` `FW_VERSION_BCD`, `0x0093` reading as 0.9.3).
+It is the only channel a host has: the boot banner goes to UART0, DFU
+refuses uploads so the flash cannot be read back, and nothing but video is
+ever written to the card. Every host OS exposes `bcdDevice` with no driver
+and no permissions, so it costs nothing and lets a companion app say what is
+installed instead of guessing.
+
+Releases up to v0.9.2 hardcoded `0x0100` there, which carries no
+information. A host reading that value should report the version as unknown
+rather than as 1.0.0; the presence of the DFU interface separates the two if
+a real 1.0.0 ever collides with it.
+
+Bump `FW_VERSION_MAJOR`/`MINOR`/`PATCH` and `FW_VERSION_STR` together for a
+release — they are the one place the version lives, and the boot banner
+prints the same string.

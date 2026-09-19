@@ -56,10 +56,7 @@ export async function probe(): Promise<UsbSnapshot> {
 
     snap.board = true
     const bcd = await readHex(join(dir, 'bcdDevice'))
-    if (bcd !== null) {
-      snap.firmware.bcdDevice = bcd
-      snap.firmware.version = decodeVersion(bcd)
-    }
+    if (bcd !== null) snap.firmware.bcdDevice = bcd
     snap.firmware.serial = await readText(join(dir, 'serial'))
 
     /* This device's interfaces are the sibling directories prefixed with its
@@ -68,6 +65,10 @@ export async function probe(): Promise<UsbSnapshot> {
       const cls = await readHex(join(SYSFS, iface, 'bInterfaceClass'))
       if (cls === DFU_CLASS) snap.dfuCapable = true
     }
+
+    /* Decoding needs the DFU answer: the legacy 0x0100 sentinel is only
+     * unambiguous alongside it. */
+    snap.firmware.version = decodeVersion(snap.firmware.bcdDevice, snap.dfuCapable)
   }
 
   return snap

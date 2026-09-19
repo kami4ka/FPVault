@@ -67,7 +67,15 @@ void usb_dc_low_level_init(void) {
 
 /* clang-format off */
 static const uint8_t msc_descriptor[] = {
-    USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0x00, 0x00, 0x00, USBD_VID, USBD_PID, 0x0100, 0x01),
+    /* bcdDevice carries the firmware version (board.h FW_VERSION_BCD).
+     * It is the only way a host can tell which firmware a board runs - the
+     * boot banner goes to UART0, DFU refuses uploads, and the card holds
+     * nothing but video. Releases up to v0.9.2 hardcoded 0x0100 here, so a
+     * host that reads that value should report the version as unknown
+     * rather than as 1.0.0; the presence of the DFU interface below tells
+     * the two apart if it ever matters. */
+    USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0x00, 0x00, 0x00, USBD_VID, USBD_PID,
+                               FW_VERSION_BCD, 0x01),
     USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     MSC_DESCRIPTOR_INIT(0x00, MSC_OUT_EP, MSC_IN_EP, MSC_MAX_MPS, 0x02),
     DFU_DESCRIPTOR_INIT(0x01, 0x04),

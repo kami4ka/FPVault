@@ -14,6 +14,11 @@ import { BoardGuide } from '../guidance/BoardGuide.js'
 import type { Strings } from '../i18n/index.js'
 
 function Capability({ device, s }: { device: DeviceState; s: Strings }) {
+  /* Firmware from v0.9.3 encodes its version in bcdDevice; anything older
+   * reports a constant that means nothing, and the UI says so rather than
+   * inventing a number. */
+  const version =
+    device.kind === 'reader' || device.kind === 'legacy' ? device.firmware.version : null
   const copy =
     device.kind === 'reader'
       ? s.firmwareScreen.capableDfu
@@ -51,13 +56,15 @@ function Capability({ device, s }: { device: DeviceState; s: Strings }) {
       <div className="mt-4 border-t border-[var(--color-line)] pt-3">
         <p className="text-xs">
           <span className="text-[var(--color-muted)]">{s.firmwareScreen.installed}: </span>
-          <span className="font-[family-name:var(--font-mono)]">
-            {s.card.firmwareUnknown}
+          <span className="font-[family-name:var(--font-mono)] font-semibold">
+            {version ?? s.card.firmwareUnknown}
           </span>
         </p>
-        <p className="mt-1 max-w-prose text-[11px] leading-relaxed text-[var(--color-muted)]">
-          {s.firmwareScreen.whyUnknown}
-        </p>
+        {!version && (
+          <p className="mt-1 max-w-prose text-[11px] leading-relaxed text-[var(--color-muted)]">
+            {s.firmwareScreen.whyUnknown}
+          </p>
+        )}
       </div>
     </section>
   )

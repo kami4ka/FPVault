@@ -94,7 +94,7 @@ export const en = {
     install: (tag: string) => `Install ${tag}`,
     cannotFlash: 'Connect the board in card-reader mode to install firmware',
     whyUnknown:
-      'The board does not report its firmware version over USB. It prints it to the serial console at boot, which this app cannot read. Installing the same release twice is harmless, so there is no need to be sure.',
+      'This board runs firmware older than v0.9.3, which is when the version was first reported over USB. Before that it existed only in the boot message on the serial console. Installing the same release twice is harmless, so there is no need to be sure.',
     safetyNote:
       'Nothing is written to the board until the whole image has arrived and the board has checked it. A cable pulled mid-transfer changes nothing; the second or so of writing is the only moment that matters, and the app says when that is happening.',
     capableDfu: {

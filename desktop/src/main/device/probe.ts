@@ -40,12 +40,21 @@ export const EMPTY: UsbSnapshot = {
 }
 
 /**
- * bcdDevice is hardcoded 0x0100 in src/usbmsc.c and carries no version, so
- * that value tells us nothing and must not be shown as one. Once firmware
- * encodes the release there (0x0092 for v0.9.2), decode it.
+ * Decode the firmware version out of bcdDevice.
+ *
+ * Firmware from v0.9.3 encodes its version here (src/board.h
+ * FW_VERSION_BCD): 0x0093 reads as 0.9.3. Everything up to v0.9.2
+ * hardcoded 0x0100, which carries no information — so that exact value is
+ * reported as unknown rather than as "1.0.0".
+ *
+ * That leaves one future ambiguity: a real v1.0.0 would also encode as
+ * 0x0100. `hasDfu` settles it, because every firmware that predates the
+ * version field also predates the DFU interface.
  */
-export function decodeVersion(bcdDevice: number): string | null {
-  if (bcdDevice === 0 || bcdDevice === 0x0100) return null
+export function decodeVersion(bcdDevice: number, hasDfu = false): string | null {
+  if (bcdDevice === 0) return null
+  if (bcdDevice === 0x0100 && !hasDfu) return null /* v0.9.2 or earlier */
+
   const major = (bcdDevice >> 8) & 0xff
   const minor = (bcdDevice >> 4) & 0x0f
   const patch = bcdDevice & 0x0f

@@ -48,8 +48,8 @@ int main(void) {
     system_init();
     arm32_interrupt_enable();
 
-    printf("\r\n[%s] up. build %s %s (%s). s state, r reset\r\n",
-           BOARD_NAME, __DATE__, __TIME__, GIT_REV);
+    printf("\r\n[%s %s] up. build %s %s (%s). s state, r reset\r\n",
+           BOARD_NAME, FW_VERSION_STR, __DATE__, __TIME__, GIT_REV);
 
     /* Reset-cause breadcrumbs (board.h): DRAM survives warm resets, so the
      * previous life reports how it ended. Crash marks name the faulting
