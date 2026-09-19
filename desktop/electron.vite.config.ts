@@ -5,9 +5,19 @@ import { resolve } from 'node:path'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    /* externalizeDepsPlugin only externalises `dependencies`, so `usb` has
+     * to be named here: it lives in optionalDependencies (the app works
+     * without it — see src/main/device/probe.ts) and a native module cannot
+     * be bundled. Without this the import silently resolves to inlined
+     * JavaScript and firmware updates quietly stop being offered. */
+    plugins: [externalizeDepsPlugin({ exclude: [] })],
     resolve: { alias: { '@shared': resolve('src/shared') } },
-    build: { rollupOptions: { input: resolve('src/main/index.ts') } }
+    build: {
+      rollupOptions: {
+        input: resolve('src/main/index.ts'),
+        external: ['usb']
+      }
+    }
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
