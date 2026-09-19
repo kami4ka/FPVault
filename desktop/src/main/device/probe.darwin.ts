@@ -19,6 +19,17 @@ import { decodeVersion, EMPTY, type UsbSnapshot } from './probe.js'
 
 const run = promisify(execFile)
 
+/**
+ * ioreg answers in about 150 ms on a machine with a dozen USB devices, so
+ * this is not a budget — it is a ceiling for the cases where the system,
+ * not the command, is slow. macOS evaluates a bundle's signature on its
+ * first launch, and while that is happening spawning anything at all can
+ * stall for seconds; an app launched straight after being built hits it
+ * every time. Five seconds was not enough, and the cost of being wrong is
+ * that the app announces "No board detected" with a board plugged in.
+ */
+const IOREG_TIMEOUT_MS = 20_000
+
 /** One `+-o` node's flat properties, as far as we care about them. */
 interface Node {
   idVendor?: number
@@ -65,7 +76,7 @@ export async function probe(): Promise<UsbSnapshot> {
   const { stdout } = await run(
     'ioreg',
     ['-r', '-c', 'IOUSBHostInterface', '-l', '-w0'],
-    { maxBuffer: 16 * 1024 * 1024, timeout: 5000 }
+    { maxBuffer: 16 * 1024 * 1024, timeout: IOREG_TIMEOUT_MS }
   )
   const nodes = parseNodes(stdout)
   const snap: UsbSnapshot = { ...EMPTY, firmware: { ...EMPTY.firmware } }
@@ -94,7 +105,7 @@ export async function probe(): Promise<UsbSnapshot> {
   if (!snap.fel && !snap.board) {
     const { stdout: devs } = await run('ioreg', ['-r', '-c', 'IOUSBHostDevice', '-l', '-w0'], {
       maxBuffer: 16 * 1024 * 1024,
-      timeout: 5000
+      timeout: IOREG_TIMEOUT_MS
     })
     for (const n of parseNodes(devs)) {
       if (n.idVendor === FEL_VID && n.idProduct === FEL_PID) snap.fel = true

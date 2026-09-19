@@ -29,15 +29,29 @@ export interface UsbSnapshot {
    * to the interface we would need, so dfu-util/sunxi-fel cannot open it.
    */
   driverNeeded: 'dfu' | 'fel' | null
+  /**
+   * False when the probe could not answer at all.
+   *
+   * This is not the same fact as "nothing is plugged in", and conflating the
+   * two is how the app ends up saying "No board detected" at the exact
+   * moment it has no idea. Everything else here is only meaningful when
+   * this is true.
+   */
+  ok: boolean
 }
 
+/** A completed probe that found nothing. */
 export const EMPTY: UsbSnapshot = {
   board: false,
   dfuCapable: false,
   fel: false,
   firmware: { bcdDevice: 0, serial: null, version: null },
-  driverNeeded: null
+  driverNeeded: null,
+  ok: true
 }
+
+/** A probe that did not complete, and so knows nothing either way. */
+export const UNKNOWN: UsbSnapshot = { ...EMPTY, ok: false }
 
 /**
  * Decode the firmware version out of bcdDevice.
@@ -79,6 +93,6 @@ export async function probeUsb(): Promise<UsbSnapshot> {
     return await cached()
   } catch (err) {
     console.error('[device] USB probe failed:', err)
-    return EMPTY
+    return UNKNOWN
   }
 }

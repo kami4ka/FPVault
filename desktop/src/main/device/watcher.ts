@@ -28,6 +28,18 @@ import { findCardVolume } from './volumes.js'
 const POLL_MS = 1500
 /** How long to wait for the OS to mount the card after the board appears. */
 const MOUNT_GRACE_MS = 8000
+/**
+ * How many probes in a row may fail before the last known state is given up.
+ *
+ * A probe that cannot answer is not evidence that the board went away, and
+ * treating it as such made the app announce "No board detected" whenever
+ * ioreg was slow — which it reliably is on the first launch after a build,
+ * while macOS evaluates the bundle's signature. Holding the previous answer
+ * rides that out. It is bounded so a permanently broken probe eventually
+ * stops insisting on a board that is long unplugged: at the 1.5 s poll,
+ * this is about twelve seconds of doubt.
+ */
+const MAX_HELD_FAILURES = 8
 
 export class DeviceWatcher extends EventEmitter {
   private current: DeviceState = { kind: 'absent' }
@@ -35,6 +47,8 @@ export class DeviceWatcher extends EventEmitter {
   private scanning = false
   /** When the board was first seen without a mounted volume. */
   private boardSeenAt: number | null = null
+  /** Consecutive probes that could not answer. */
+  private blindScans = 0
 
   get state(): DeviceState {
     return this.current
@@ -69,7 +83,18 @@ export class DeviceWatcher extends EventEmitter {
     try {
       usb = await probeUsb()
     } catch {
-      /* probeUsb already logs; a failed probe degrades to card-only. */
+      /* probeUsb logs and reports !ok; this is belt and braces. */
+      usb = { ...EMPTY, ok: false }
+    }
+
+    /* A probe that could not answer knows nothing, and "nothing" must not
+     * be rendered as "no board". Keep saying what was last actually
+     * observed, for a bounded while. */
+    if (!usb.ok) {
+      this.blindScans += 1
+      if (this.blindScans <= MAX_HELD_FAILURES) return this.current
+    } else {
+      this.blindScans = 0
     }
 
     if (usb.fel) {
