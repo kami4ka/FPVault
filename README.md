@@ -32,6 +32,10 @@ core only orchestrates.
 - **Firmware update over the same USB cable** — the board also shows up as
   a standard DFU device; `dfu-util -D fpvault.bin` stages, verifies, burns
   NOR and reboots. No buttons, no serial adapter, nothing on the card.
+- **A desktop app that needs nothing installed** — [FPVault
+  Desktop](desktop/README.md) imports and repairs clips, gives them real
+  dates the board has no clock to provide, joins or exports a session, plays
+  them frame by frame, and installs firmware over USB.
 
 ## Status
 
@@ -57,6 +61,11 @@ Early bring-up. Milestones:
       (U-Boot with baked-in bootcmd at NOR 0, firmware at NOR 0x100000)
 - [x] M9 — USB mass storage: connect to a computer, the card mounts
       (CherryUSB device stack on the MUSB controller, USB 2.0 High-Speed)
+- [x] M10 — **FPVault Desktop**, the companion app in `desktop/`: imports
+      clips and repairs the ones a power cut truncated, gives them real
+      timestamps, joins or exports a session, plays them frame-accurately,
+      and updates firmware over USB with animated help for the parts that
+      need hands on the board
 
 Power the board with a card inserted and it records — no host, no
 commands.
