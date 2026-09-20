@@ -130,6 +130,101 @@ Any F1C200s board with: CVBS input to TV_IN, SD card on SDC0 (PF0–PF5,
 flight controller for RunCam control. 64 MB (F1C200s) required — the DMA
 arena does not fit the 32 MB F1C100s.
 
+## Preparing a card
+
+The firmware cannot format a card — FatFs is built without `f_mkfs` — so the
+card has to arrive ready. It also never writes anything to the card but
+clips, and it expects the same courtesy back.
+
+### Format it FAT32, with an MBR
+
+| | |
+|---|---|
+| Filesystem | **FAT32**. exFAT is compiled out (`FF_FS_EXFAT 0`) |
+| Partitioning | **Master Boot Record**, or none. GPT is not read |
+| Names | 8.3 uppercase; long filenames are compiled out (`FF_USE_LFN 0`) |
+| Size | Anything up to FAT32's limits. Clips run ~2.4 GB/hour, so 32 GB is about 13 hours |
+| Speed | Any Class 10 / U1 card. Recording needs under 1 MB/s; the path does 7.8 |
+
+The format matters most for larger cards. The SD specification assigns exFAT
+to SDXC — every card over 32 GB — and FAT32 only to SDHC, so a new 64 GB card
+will be exFAT out of the packet and the board will not mount it. Cards of
+32 GB and under are usually already FAT32 and can go straight in.
+
+macOS, replacing `diskN` with the card from `diskutil list`:
+
+```sh
+diskutil list                                          # find the card, carefully
+diskutil eraseDisk FAT32 FPVAULT MBRFormat /dev/diskN
+```
+
+Linux, replacing `sdX`:
+
+```sh
+sudo parted /dev/sdX mklabel msdos
+sudo parted -a optimal /dev/sdX mkpart primary fat32 1MiB 100%
+sudo mkfs.vfat -F 32 -n FPVAULT /dev/sdX1
+```
+
+Windows Disk Management will not offer FAT32 above 32 GB; use `format /FS:FAT32`
+from an elevated prompt, or format the card on another machine.
+
+### Erase any old boot blob
+
+This one bites hardest and looks like a dead board. The F1C200s BROM checks
+the SD card for a boot header **before** it falls back to SPI-NOR, so a card
+that has ever held an Allwinner image — Armbian, a LicheePi image, anything
+written with `dd` — will hijack the boot and the board will not start its own
+firmware. Reformatting does not remove it: the header lives at sector 16, in
+the gap before the first partition, which no filesystem touches.
+
+The board can clear it itself. On the console, `:M` to mount, then `:Z`:
+
+```
+[sd] partition 0 starts at LBA 2048
+[sd] STALE BOOT BLOB FOUND (eGON at sector 16) - scrubbing
+[sd] scrubbed sectors 16..47 - the card can no longer hijack boot
+```
+
+`:Z` refuses to run if the first partition starts before LBA 48, because
+then there is no gap and sectors 16–47 belong to the filesystem. That is
+another reason to use an MBR rather than a partitionless card — a normal
+partition table leaves the gap.
+
+### Keep it to clips
+
+Nothing but recordings should live on the card. macOS in particular writes
+`.Spotlight-V100`, `.fseventsd`, `.Trashes` and `._` files to any volume it
+mounts, and a card that has been plugged into a Mac will collect them.
+
+```sh
+mdutil -i off /Volumes/FPVAULT                 # stop Spotlight indexing it
+touch /Volumes/FPVAULT/.metadata_never_index   # and keep it stopped
+mkdir -p /Volumes/FPVAULT/.fseventsd && touch /Volumes/FPVAULT/.fseventsd/no_log
+defaults write com.apple.desktopservices DSDontWriteUSBStores -bool true
+dot_clean /Volumes/FPVAULT                     # merge away existing ._ files
+```
+
+### What the board does for itself
+
+Nothing needs creating by hand. On the first recording the firmware builds
+the DCF tree itself:
+
+```
+/DCIM/100FCDVR/FCDV0001.AVI
+/DCIM/100FCDVR/FCDV0002.AVI
+/DCIM/101FCDVR/FCDV0003.AVI     <- next power-on, next directory
+```
+
+A new directory per power-up groups clips by session without needing a clock.
+File numbers are monotonic across the whole card and are never reused, so no
+two clips can share a name even after deletions — the boot-time scan of the
+card is the only authority, which means the numbering self-heals after a card
+swap or a manual cleanup.
+
+At `FCDV9999` or directory `999` the recorder stops rather than overwrite
+anything, and asks for a cleanup or a reformat.
+
 ## License
 
 GPL-3.0-or-later. See [CREDITS.md](CREDITS.md) for the vendored and derived
