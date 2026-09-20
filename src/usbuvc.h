@@ -79,8 +79,10 @@
     /* --- VideoControl interface, no endpoints (control goes over EP0) --- */ \
     0x09, 0x04, (vcIntf), 0x00, 0x00, 0x0E, 0x01, 0x00, (strIdx),              \
                                                                                \
-    /* VC header: UVC 1.00, one streaming interface, 24 MHz clock */           \
-    0x0D, 0x24, 0x01, WBVAL(0x0100), WBVAL(UVC_VC_TOTAL),                      \
+    /* VC header: UVC 1.10, one streaming interface, 24 MHz clock.            \
+     * 1.10 and not 1.00 because bulk needs bmFramingInfo, which only exists \
+     * in 1.1's negotiation - see the probe structure in usbuvc.c. */        \
+    0x0D, 0x24, 0x01, WBVAL(0x0110), WBVAL(UVC_VC_TOTAL),                      \
     DBVAL(24000000u), 0x01, (vsIntf),                                          \
                                                                                \
     /* Input terminal 1: a camera. No focal length, no controls. */            \

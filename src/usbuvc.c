@@ -29,6 +29,7 @@
 #include "usbuvc.h"
 #include "pipeline.h"
 #include "f1c100s_timer.h"
+#include "capture.h"
 
 /* The payload header has to abut the JPEG, so it lives in the slot's own
  * slack immediately before it. The recorder's AVI chunk header wants the
@@ -113,18 +114,41 @@ static struct usbd_endpoint uvc_in_ep = {
 #define UVC_VS_PROBE_CONTROL  0x01
 #define UVC_VS_COMMIT_CONTROL 0x02
 
-#define UVC_PROBE_LEN 26u
+/*
+ * UVC 1.1's 34-byte negotiation, not 1.0's 26.
+ *
+ * The extra fields are the point. bmFramingInfo tells the host that the
+ * payload headers carry meaningful frame-id and end-of-frame bits, and for a
+ * bulk device that is the only thing marking where one frame stops and the
+ * next begins - an isochronous device gets that for free from the packet
+ * structure. Without it a host may receive every byte correctly and still
+ * have no idea how to cut the stream into frames, which looks exactly like a
+ * camera that is connected, streaming, and black.
+ */
+#define UVC_PROBE_LEN 34u
 
 static uint8_t probe_ctrl[UVC_PROBE_LEN];
 
+/*
+ * Fill the negotiated structure from what the board is actually capturing.
+ *
+ * Two frame descriptors are advertised, 720x480 at 29.97 and 720x576 at 25,
+ * because the input can be either and capture_follow_input() switches at
+ * runtime. But only one of them is true at any moment, and the board cannot
+ * produce the other. So probe answers with the one that matches the live
+ * signal rather than with whatever the host asked for. That is exactly what
+ * probe negotiation is for: the host proposes, the device answers with what
+ * it will really do, and the host is expected to take that answer.
+ */
 static void probe_defaults(void) {
-    uint32_t interval = UVC_INTERVAL_NTSC;
+    int pal = (capture_standard() == VID_PAL);
+    uint32_t interval = pal ? UVC_INTERVAL_PAL : UVC_INTERVAL_NTSC;
     uint32_t maxframe = UVC_MAX_FRAME_SIZE;
 
     for(unsigned i = 0; i < UVC_PROBE_LEN; i++) probe_ctrl[i] = 0;
     probe_ctrl[0] = 0x01; /* bmHint: hold dwFrameInterval */
     probe_ctrl[2] = 0x01; /* bFormatIndex: the only format, MJPEG */
-    probe_ctrl[3] = 0x01; /* bFrameIndex: 720x480; see usbuvc_set_standard */
+    probe_ctrl[3] = pal ? 0x02 : 0x01; /* bFrameIndex follows the signal */
     probe_ctrl[4] = (uint8_t)(interval);
     probe_ctrl[5] = (uint8_t)(interval >> 8);
     probe_ctrl[6] = (uint8_t)(interval >> 16);
@@ -139,6 +163,17 @@ static void probe_defaults(void) {
     probe_ctrl[23] = (uint8_t)(maxframe >> 8);
     probe_ctrl[24] = (uint8_t)(maxframe >> 16);
     probe_ctrl[25] = (uint8_t)(maxframe >> 24);
+    /* dwClockFrequency, matching the VideoControl header. */
+    probe_ctrl[26] = (uint8_t)(24000000u);
+    probe_ctrl[27] = (uint8_t)(24000000u >> 8);
+    probe_ctrl[28] = (uint8_t)(24000000u >> 16);
+    probe_ctrl[29] = (uint8_t)(24000000u >> 24);
+    /* bmFramingInfo bit 0: the payload header's frame id and end-of-frame
+     * bits are valid. Bit 1: end-of-slice is not used. */
+    probe_ctrl[30] = 0x01;
+    probe_ctrl[31] = 0x01; /* bPreferedVersion */
+    probe_ctrl[32] = 0x01; /* bMinVersion */
+    probe_ctrl[33] = 0x01; /* bMaxVersion */
 }
 
 static int uvc_vs_request(uint8_t busid, struct usb_setup_packet* setup,
@@ -174,9 +209,16 @@ static int uvc_vs_request(uint8_t busid, struct usb_setup_packet* setup,
         *len = 1;
         return 0;
     case UVC_SET_CUR:
-        /* The host echoes back what it intends to use. There is only one
-         * choice, so it is accepted and ignored - except that a commit is
-         * the moment streaming begins. */
+        /* What the host proposes is noted and then answered with what the
+         * board will really send, which probe_defaults() takes from the live
+         * signal. A host that asks for the PAL frame while the input is NTSC
+         * would otherwise expect 576 lines and be handed 480. */
+        if(*len >= 4) {
+            printf("[uvc] host asked for format %u frame %u, %s\r\n",
+                   (unsigned)(*data)[2], (unsigned)(*data)[3],
+                   cs == UVC_VS_COMMIT_CONTROL ? "commit" : "probe");
+        }
+        probe_defaults();
         if(cs == UVC_VS_COMMIT_CONTROL) {
             usbd_video_open(0, 0);
         }

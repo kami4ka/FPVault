@@ -81,6 +81,7 @@ int main(void)
 
     /* VC header declares the length of the class-specific block after it. */
     vc_cs = uvc[17 + 5] | (uvc[17 + 6] << 8);
+    eq("VC header bcdUVC is 1.10", uvc[17 + 3] | (uvc[17 + 4] << 8), 0x0110);
     eq("VC header wTotalLength", vc_cs, UVC_VC_TOTAL);
     eq("VC header baInterfaceNr points at VS", uvc[17 + 12], 0x03);
     walk("VC class-specific block walks", 17, vc_cs);
