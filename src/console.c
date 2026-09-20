@@ -21,6 +21,7 @@
 #include "recorder.h"
 #include "pipeline.h"
 #include "spinor.h"
+#include "f1c100s_clock.h"
 
 extern uint32_t sys_uptime_s(void);
 
@@ -30,6 +31,10 @@ static void cmd_state(void) {
     printf("  capture %08x  bsring %08x x%lu slots  idx %08x\r\n",
            (unsigned)CAPTURE_BASE, (unsigned)BSRING_BASE,
            (unsigned long)BSRING_SLOTS, (unsigned)IDX_BASE);
+    printf("  cpu %lu MHz  ve %lu MHz  video %lu MHz\r\n",
+           (unsigned long)(clk_pll_get_freq(PLL_CPU) / 1000000u),
+           (unsigned long)(clk_pll_get_freq(PLL_VE) / 1000000u),
+           (unsigned long)(clk_pll_get_freq(PLL_VIDEO) / 1000000u));
     printf("  tvd status %08lx  signal %s  std %d  frames %lu\r\n",
            (unsigned long)capture_state(), capture_signal_ok() ? "ok" : "NO",
            (int)capture_standard(), (unsigned long)capture_frames());
@@ -105,6 +110,7 @@ static void dispatch(char c) {
     case 'I': enctest_probe_planar(); break;
     case 'E': enctest_probe_defe(); break;
     case 'F': enctest_scan_defe(); break;
+    case 'G': enctest_time_chroma(); break;
     case 'n': { /* NOR self-test: JEDEC id + first 4 KB of the fw slot vs RAM */
         static uint8_t rb[4096];
         uint32_t id = spinor_read_id();

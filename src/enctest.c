@@ -715,3 +715,93 @@ void enctest_scan_defe(void) {
     defe_reset();
     pipeline_freeze(0);
 }
+
+/* ---- what would the CPU chroma pass actually cost? ----------------------
+ *
+ * The frontend has no chroma channel, so a 720p path has to build the
+ * chroma plane in software: read the captured NV12 chroma (720x240 UV
+ * pairs), resample it to the output geometry, and write it back still
+ * interleaved, because interleaved is the only thing the VE will read.
+ *
+ * That cost is the one number that decides whether 30 fps survives, and it
+ * is the last one in the budget that was still an estimate. So it is timed
+ * here rather than argued about: the real loop, the real sizes, the real
+ * buffers, averaged over enough frames to swamp the timer's granularity.
+ *
+ * Nearest-neighbour rather than filtered. Chroma is already at a quarter
+ * resolution and the source is analog composite; a better kernel would cost
+ * more and show less. If nearest neighbour does not fit, nothing does.
+ */
+#define CHR_SW 720u  /* source: bytes per interleaved chroma row */
+#define CHR_SH 240u  /* source: chroma rows (NTSC 4:2:0)         */
+#define CHR_DW 1280u /* dest:   bytes per interleaved chroma row */
+#define CHR_DH 360u  /* dest:   chroma rows at 1280x720          */
+#define CHR_SRC PRB_NVC
+#define CHR_DST PRB_Y
+
+void enctest_time_chroma(void) {
+    const uint8_t* src = (const uint8_t*)CHR_SRC;
+    uint8_t* dst = (uint8_t*)CHR_DST;
+    uint32_t t0, us, n, i;
+    const uint32_t reps = 30;
+
+    pipeline_freeze(1);
+    for(i = 0; i < CHR_SW * CHR_SH; i++) ((uint8_t*)CHR_SRC)[i] = (uint8_t)i;
+
+    t0 = tim_get_cnt(TIM0);
+    for(n = 0; n < reps; n++) {
+        uint32_t row;
+        for(row = 0; row < CHR_DH; row++) {
+            /* Source row for this output row, and a fixed-point step across
+             * it. The accumulator counts UV pairs, so the low bit of the
+             * byte index is never disturbed and U stays U. */
+            const uint8_t* s = src + ((row * CHR_SH) / CHR_DH) * CHR_SW;
+            uint8_t* d = dst + row * CHR_DW;
+            uint32_t acc = 0;
+            const uint32_t step = ((CHR_SW / 2u) << 16) / (CHR_DW / 2u);
+            uint32_t col;
+            for(col = 0; col < CHR_DW; col += 2) {
+                uint32_t sp = (acc >> 16) << 1;
+                d[col] = s[sp];
+                d[col + 1] = s[sp + 1];
+                acc += step;
+            }
+        }
+    }
+    us = (uint32_t)(t0 - tim_get_cnt(TIM0)) / 24u;
+
+    printf("[chroma] %ux%u -> %ux%u interleaved: %lu us per frame "
+           "(%lu reps, %lu us total)\r\n",
+           (unsigned)(CHR_SW / 2u), (unsigned)CHR_SH, (unsigned)(CHR_DW / 2u),
+           (unsigned)CHR_DH, (unsigned long)(us / reps), (unsigned long)reps,
+           (unsigned long)us);
+    printf("[chroma] %lu%% of a 33367 us frame, %lu KB written per frame\r\n",
+           (unsigned long)((us / reps) * 100u / 33367u),
+           (unsigned long)(CHR_DW * CHR_DH / 1024u));
+
+    /* How much of that is the loop and how much is the memory? A word-wise
+     * copy of the same volume is the floor: no resampling can beat it, so
+     * it says whether optimising the loop is worth anything or whether the
+     * pass is already bandwidth-bound and 28 ms is close to the best there
+     * is. Same buffers, same cacheability, same size. */
+    {
+        uint32_t words = (CHR_DW * CHR_DH) / 4u;
+        volatile uint32_t* d32;
+        const uint32_t* s32;
+        t0 = tim_get_cnt(TIM0);
+        for(n = 0; n < reps; n++) {
+            d32 = (volatile uint32_t*)CHR_DST;
+            s32 = (const uint32_t*)CHR_SRC;
+            for(i = 0; i < words; i++) d32[i] = s32[i & 0xffffu];
+        }
+        us = (uint32_t)(t0 - tim_get_cnt(TIM0)) / 24u;
+        printf("[chroma] word-copy floor for the same %lu KB: %lu us "
+               "(%lu%% of a frame, %lu MB/s)\r\n",
+               (unsigned long)(CHR_DW * CHR_DH / 1024u),
+               (unsigned long)(us / reps),
+               (unsigned long)((us / reps) * 100u / 33367u),
+               (unsigned long)((uint64_t)CHR_DW * CHR_DH * reps /
+                               (us ? us : 1u)));
+    }
+    pipeline_freeze(0);
+}

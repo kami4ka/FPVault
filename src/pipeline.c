@@ -33,6 +33,12 @@ static uint32_t follow_div = 0;
 /* stats */
 static volatile uint32_t enc_frames = 0, enc_fails = 0, ring_drops = 0;
 static uint32_t ring_hiwater = 0;
+/* Encode occupancy. Completion is noticed on the next 1 kHz tick, so these
+ * are quantised to a millisecond and read high by up to one - fine for a
+ * figure being compared against a 33 ms frame budget, and the honest number
+ * anyway, since it is how long the slot is unavailable rather than how long
+ * the engine was busy. */
+static volatile uint32_t enc_us_max = 0, enc_us_sum = 0, enc_us_n = 0;
 
 static uint32_t slot_base(uint32_t idx) {
     return BSRING_BASE + (idx % BSRING_SLOTS) * BSRING_SLOT_SIZE;
@@ -84,6 +90,10 @@ void pipeline_tick(void) {
     if(enc_busy) {
         int32_t r = vejpeg_poll_done();
         if(r >= 0) {
+            uint32_t us = (uint32_t)(enc_start_t - tim_get_cnt(TIM0)) / 24u;
+            if(us > enc_us_max) enc_us_max = us;
+            enc_us_sum += us;
+            enc_us_n++;
             slot_len[head % BSRING_SLOTS] = (uint32_t)r;
             head++; /* publish AFTER the length */
             enc_busy = 0;
@@ -186,6 +196,19 @@ void pipeline_stats(void) {
            (unsigned long)enc_fails, (unsigned long)(head - tail),
            (unsigned long)BSRING_SLOTS, (unsigned long)ring_hiwater,
            (unsigned long)ring_drops, capture_signal_ok() ? "LOCK" : "no-signal");
+    if(enc_us_n) {
+        uint32_t avg = enc_us_sum / enc_us_n;
+        printf("[pipe] encode %lu us avg, %lu us max, %ux%u -> %lu%% of a "
+               "%lu us frame\r\n",
+               (unsigned long)avg, (unsigned long)enc_us_max, (unsigned)CAP_FW,
+               (unsigned)capture_height(),
+               (unsigned long)(avg * 100u / (capture_standard() == VID_PAL
+                                                 ? 40000u
+                                                 : 33367u)),
+               (unsigned long)(capture_standard() == VID_PAL ? 40000u : 33367u));
+        enc_us_sum = 0;
+        enc_us_n = 0;
+    }
     last_in = in;
     last_enc = enc_frames;
 }
