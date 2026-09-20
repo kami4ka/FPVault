@@ -649,7 +649,17 @@ void usbd_ep_flush(uint8_t busid, const uint8_t ep)
     musb_set_active_ep(ep_idx);
 
     if (USB_EP_DIR_IS_IN(ep)) {
-        HWREGH(USB_BASE + MUSB_TXIE_OFFSET) &= ~(1 << ep_idx);
+        /* Deliberately does NOT touch MUSB_TXIE_OFFSET. That register holds
+         * one bit per endpoint including endpoint 0, and the interrupt
+         * handler read-modify-writes it too. Clearing our bit from the main
+         * loop raced with that and could drop endpoint 0's bit, which stops
+         * the device answering control transfers: the host removes it from
+         * the bus while the firmware carries on, LED blinking and console
+         * healthy. Seen twice before it was understood.
+         *
+         * Nothing is needed anyway - flushing clears TXRDY, so no completion
+         * is raised, and the handler disables the bit itself when a transfer
+         * finishes. */
         if (HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) & USB_TXCSRL1_TXRDY) {
             HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = USB_TXCSRL1_FLUSH;
         }
