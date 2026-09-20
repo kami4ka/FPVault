@@ -25,6 +25,11 @@
 typedef struct vejpeg_cfg {
     uint16_t w, h;
     uint8_t isp_fmt;   /* VE_ISP_CTRL[31:28]: 0=NV12; 1 or 2 = NV16 (experiment) */
+    /* VE_ISP_PIC_STRIDE[15:0]. Zero for every semi-planar format, where the
+     * chroma plane is as wide as the luma one and the hardware needs no
+     * second stride. Non-zero only for the planar probe: if a planar format
+     * code exists, its chroma plane is half as wide and has to say so. */
+    uint16_t isp_stride_lo;
     uint8_t samp_2x2;  /* SOF0 luma sampling: 1 = 2x2 (4:2:0), 0 = 2x1 (4:2:2) */
     uint8_t quality;   /* 1..100, must match the prefix the file gets */
     uint8_t no_hdr;    /* skip the SOF0/SOS put_bits push (bring-up experiment) */

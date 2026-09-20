@@ -23,8 +23,12 @@
 
 #define PAT_W 720u
 #define PAT_H 480u
-#define PAT_Y (TESTPAT_BASE)
-#define PAT_C (TESTPAT_BASE + 0x200000u)
+/* Bench sub-buffers, all inside TESTPAT_BASE..TESTPAT_SIZE. Generous power-
+ * of-two slots rather than exact plane sizes, so a geometry change cannot
+ * silently walk one buffer into the next. _Static_assert at the bottom of
+ * the probe keeps the whole set inside the region. */
+#define PAT_Y (TESTPAT_BASE + 0x000000u) /* <= 720x576 luma   */
+#define PAT_C (TESTPAT_BASE + 0x080000u) /* <= 720x576 chroma */
 #define OUT_PHYS (BSRING_BASE + BSRING_DATA_OFF)
 #define OUT_MAX (BSRING_SLOT_SIZE - BSRING_DATA_OFF)
 
@@ -344,4 +348,178 @@ void enctest_encode(int dump) {
         b64_finish(&b);
     }
     printf("-----END JPEG-----\r\n");
+}
+
+/* ---- ISP input-format probe: is there a planar 4:2:0 code? ---------------
+ *
+ * The display-engine frontend can scale DRAM to DRAM, which is what a 720p
+ * path needs. But its write-back emits three separate planes
+ * (DE_SCAL_OUTPYUV420, and de_fe.c programs wb_linestrd0/1/2 to prove it),
+ * while every documented VE input format is semi-planar - NV12 or NV16,
+ * chroma interleaved. jemk's encoder writes input_color_format << 29 with
+ * exactly two values, and nothing public says the field holds anything
+ * else. The field cannot be read back, so it is swept here instead of
+ * assumed. This is the go/no-go for scaling in hardware.
+ *
+ * The discriminator is exactness, not eyeballing. One picture is laid out
+ * twice - once as NV12, once as planar - and encoded from each. A format
+ * code that reads the planar buffer correctly hands the DCT the identical
+ * sample array, so it must emit a byte-identical bitstream. Matching length
+ * AND hash is therefore proof; anything else is not a near miss, it is a
+ * different picture. The planar buffer is de-interleaved from the NV12 one
+ * rather than generated a second time, so the two cannot drift.
+ *
+ * Four layouts are tried per code, because a planar mode would need to say
+ * things NV12 never has to: chroma plane order (I420 puts U first, YV12 puts
+ * V first) and a chroma stride, which for a half-width plane cannot be the
+ * luma one. VE_ISP_PIC_STRIDE[15:0] is the only field the driver leaves at
+ * zero, so that is where a second stride would live.
+ *
+ * Geometry is 1280x720, the real target, so a hit is immediately the thing
+ * we want - and the reference encode doubles as this project's first 720p
+ * timing measurement.
+ */
+#define PRB_W 1280u
+#define PRB_H 720u
+#define PRB_Y   (TESTPAT_BASE + 0x100000u) /* luma, shared by both layouts */
+#define PRB_NVC (TESTPAT_BASE + 0x1f0000u) /* NV12 interleaved chroma       */
+#define PRB_C   (TESTPAT_BASE + 0x270000u) /* I420: U plane then V plane    */
+#define PRB_CB  (TESTPAT_BASE + 0x2f0000u) /* YV12: V plane then U plane    */
+#define PRB_END (TESTPAT_BASE + 0x370000u)
+_Static_assert(PRB_END <= TESTPAT_BASE + TESTPAT_SIZE,
+               "bench buffers overflow the region - they would land in the breadcrumbs");
+
+/* FNV-1a. Only ever compared against one reference, so a 32-bit hash is
+ * ample: the question is "are these the same bytes", not "find a collision". */
+static uint32_t fnv1a(const uint8_t* p, uint32_t n) {
+    uint32_t h = 2166136261u;
+    while(n--) {
+        h ^= *p++;
+        h *= 16777619u;
+    }
+    return h;
+}
+
+/* One encode. Returns the bitstream length, or -1; fills *hash on success.
+ * A format code that wedges the engine must not poison the codes after it,
+ * so a timeout re-inits the VE before returning. */
+static int32_t probe_one(vejpeg_cfg_t* c, uint32_t y, uint32_t ch, uint32_t* hash) {
+    int32_t blen;
+    vejpeg_start(c, y, ch, OUT_PHYS, OUT_MAX);
+    blen = vejpeg_wait(200000);
+    if(blen < 0) {
+        if(blen == VEJPEG_ERR_TIMEOUT) ve_init();
+        return -1;
+    }
+    *hash = fnv1a((const uint8_t*)OUT_PHYS, (uint32_t)blen);
+    return blen;
+}
+
+void enctest_probe_planar(void) {
+    /* Variant 4 is a positive control, not a candidate: the reference buffer
+     * re-encoded through the identical comparison path. Its fmt=0 entry MUST
+     * read MATCH. If it does not, the probe is measuring itself wrong and a
+     * clean sweep of the other four means nothing. */
+    static const char* vname[5] = {"I420 clo=0 ", "I420 clo=cs", "YV12 clo=0 ",
+                                   "YV12 clo=cs", "NV12 CONTROL"};
+    vejpeg_cfg_t c = {
+        .w = PRB_W, .h = PRB_H, .isp_fmt = 0, .samp_2x2 = 1, .quality = 75,
+        .no_hdr = 0, .isp_stride_lo = 0};
+    /* Chroma plane of a planar 4:2:0 frame is half as wide; the luma stride
+     * is written in macroblocks, so this is too. 640/16 = 40, exact. */
+    const uint16_t cs = (uint16_t)(((PRB_W / 2u) + 15u) / 16u);
+    uint32_t ylen = PRB_W * PRB_H, clen = ylen / 4u; /* per chroma plane */
+    uint32_t ref_hash = 0, t0, us;
+    int32_t ref_len;
+    int hits = 0, ctrl_ok = 0;
+    uint32_t v, f;
+
+    /* The probe encodes into slot 0 and owns the VE for the duration, so the
+     * live path has to stand still. Freezing rather than refusing keeps this
+     * to one keystroke: it lets any in-flight encode finish, then stops new
+     * ones while capture keeps running. A recorder mid-clip simply gets no
+     * frames for the second this takes; the ring absorbs longer stalls than
+     * that every time the card hiccups. */
+    pipeline_freeze(1);
+
+    /* The reference picture, in the layout the VE is known to read. */
+    testpat_bars_nv12((uint8_t*)PRB_Y, (uint8_t*)PRB_NVC, PRB_W, PRB_H);
+    cache_clean_range(PRB_Y, PRB_Y + ylen);
+    cache_clean_range(PRB_NVC, PRB_NVC + ylen / 2u);
+
+    t0 = tim_get_cnt(TIM0);
+    ref_len = probe_one(&c, PRB_Y, PRB_NVC, &ref_hash);
+    us = (uint32_t)(t0 - tim_get_cnt(TIM0)) / 24u;
+    if(ref_len < 0) {
+        printf("[isp] reference encode FAILED - probe aborted\r\n");
+        pipeline_freeze(0);
+        return;
+    }
+    printf("[isp] ref %ux%u NV12 fmt=0: %ld B, %lu us, hash %08lx\r\n",
+           (unsigned)PRB_W, (unsigned)PRB_H, (long)ref_len, (unsigned long)us,
+           (unsigned long)ref_hash);
+
+    /* Same picture, de-interleaved. Every layout encodes from the one luma
+     * plane - it is byte-identical in NV12 and in planar, so sharing it
+     * removes a copy and removes any chance of the two drifting apart.
+     * Only the chroma plane changes shape, which is what is under test. */
+    {
+        const uint8_t* src = (const uint8_t*)PRB_NVC;
+        uint8_t* u = (uint8_t*)PRB_C;
+        uint8_t* vv = u + clen;
+        uint8_t* u2 = (uint8_t*)PRB_CB + clen; /* YV12: V first, then U */
+        uint8_t* v2 = (uint8_t*)PRB_CB;
+        uint32_t row, col;
+        for(row = 0; row < PRB_H / 2u; row++) {
+            const uint8_t* s = src + row * PRB_W;
+            uint32_t o = row * (PRB_W / 2u);
+            for(col = 0; col < PRB_W / 2u; col++) {
+                u[o + col] = u2[o + col] = s[2 * col];
+                vv[o + col] = v2[o + col] = s[2 * col + 1];
+            }
+        }
+        cache_clean_range(PRB_C, PRB_C + 2u * clen);
+        cache_clean_range(PRB_CB, PRB_CB + 2u * clen);
+    }
+
+    printf("[isp] sweeping 16 format codes x 4 planar layouts (cs=%u MB)\r\n",
+           (unsigned)cs);
+
+    for(v = 0; v < 5; v++) {
+        int ctrl = (v == 4);
+        uint32_t cbase = ctrl ? PRB_NVC : (v < 2) ? PRB_C : PRB_CB;
+        c.isp_stride_lo = (!ctrl && (v & 1u)) ? cs : 0u;
+        printf("  %s:", vname[v]);
+        for(f = 0; f < 16; f++) {
+            uint32_t h = 0;
+            int32_t n;
+            c.isp_fmt = (uint8_t)f;
+            n = probe_one(&c, PRB_Y, cbase, &h);
+            if((f & 3u) == 0u && f) printf("\r\n              ");
+            if(n < 0)
+                printf(" %2lu:ERR   ", (unsigned long)f);
+            else if(n == ref_len && h == ref_hash) {
+                printf(" %2lu:MATCH ", (unsigned long)f);
+                if(ctrl)
+                    ctrl_ok = 1;
+                else
+                    hits++;
+            } else
+                printf(" %2lu:%-6ld", (unsigned long)f, (long)n);
+        }
+        printf("\r\n");
+    }
+
+    if(!ctrl_ok) {
+        printf("[isp] CONTROL FAILED - the reference did not reproduce itself.\r\n");
+        printf("[isp] the sweep below it proves nothing; fix the probe first.\r\n");
+        pipeline_freeze(0);
+        return;
+    }
+    if(hits)
+        printf("[isp] control ok, %d MATCH - planar 4:2:0 reads; the DEFE path is open\r\n",
+               hits);
+    else
+        printf("[isp] control ok, no match in 64 - the VE will not read planar\r\n");
+    pipeline_freeze(0);
 }

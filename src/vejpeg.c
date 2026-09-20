@@ -26,7 +26,7 @@ void vejpeg_start(const vejpeg_cfg_t* cfg, uint32_t phy_y, uint32_t phy_c,
     ve_w(VE_ISP_PIC_LUMA, phy_y);
     ve_w(VE_ISP_PIC_CHROMA, phy_c);
     ve_w(VE_ISP_PIC_SIZE, ((wmb & 0x3ff) << 16) | (hmb & 0x3ff));
-    ve_w(VE_ISP_PIC_STRIDE, (wmb & 0x3ff) << 16);
+    ve_w(VE_ISP_PIC_STRIDE, ((wmb & 0x3ff) << 16) | cfg->isp_stride_lo);
     ve_w(VE_ISP_CTRL, ((uint32_t)(cfg->isp_fmt & 0xf)) << 28);
 
     /* VLE output */
