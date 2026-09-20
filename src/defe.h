@@ -111,6 +111,8 @@ typedef struct defe_cfg {
     uint8_t out_port;   /* FRM_CTRL out_port_sel [9:8]          */
     uint8_t out_ctrl;   /* 1: set OUT_CTRL (keep off the backend) */
     uint32_t in_fmt;    /* INPUT_FMT as a whole; 0 means DEFE_IN_NV12 */
+    uint8_t bypass_bits; /* BYPASS register verbatim; overrides `bypass` */
+    uint8_t use_bits;    /* 1: take bypass_bits rather than `bypass`     */
 } defe_cfg_t;
 
 void defe_init(void);
@@ -127,6 +129,13 @@ int defe_wait(uint32_t timeout_us, uint32_t* status, uint32_t* intst);
 
 uint32_t defe_r(uint32_t off);
 void defe_w(uint32_t off, uint32_t val);
+
+/* The colour matrix diagonal used by defe_reset(). Mainline documents these
+ * as 13-bit signed with 10 fractional bits, making 1024 unity - but on this
+ * part 1024 maps every non-zero input to zero, so the scale is calibrated
+ * against silicon rather than taken from the documentation. */
+void defe_set_csc_diag(uint32_t d);
+void defe_load_csc_diag(uint32_t diag);
 
 /* First word of the horizontal coefficient bank, read back through the same
  * access gating the loader uses. Should be 0x40000000 - phase 0, a single

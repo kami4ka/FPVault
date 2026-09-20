@@ -29,3 +29,4 @@ void enctest_probe_planar(void);  /* 'I': sweep the ISP format field for planar 
 void enctest_probe_defe(void);    /* 'E': sweep the frontend write-back format field */
 void enctest_scan_defe(void);     /* 'F': which frontend registers exist on this part */
 void enctest_time_chroma(void);   /* 'G': time the CPU chroma pass a 720p path would need */
+void enctest_probe_coef(void);    /* 'H': map the frontend coefficient RAM */

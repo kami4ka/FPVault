@@ -95,6 +95,34 @@ uint32_t defe_coef_readback(void) {
     return v;
 }
 
+/* The colour converter sits in the path whenever the engine runs at all -
+ * on this part setting either BYPASS bit stops it running rather than
+ * bypassing a stage - and its twelve coefficients come out of reset as
+ * zero. An unprogrammed matrix turns a clean image into noise, which is
+ * precisely what every pass produced until this was loaded.
+ *
+ * Layout confirmed against the register scan, which is also what mainline
+ * describes: three rows of three multipliers plus a constant, the
+ * multipliers 13-bit signed with 10 fractional bits (mask 0x1fff at 0x070,
+ * 0x074, 0x078) and the constant 14-bit signed with 4 (mask 0x3fff at
+ * 0x07c). Identity is therefore 1024 on the diagonal and zero elsewhere. */
+void defe_load_csc_diag(uint32_t diag) {
+    uint32_t id[12] = {diag, 0, 0, 0, 0, diag, 0, 0, 0, 0, diag, 0};
+    int i;
+    for(i = 0; i < 12; i++)
+        defe_w(DEFE_CSC_COEF + i * 4, id[i]);
+}
+
+static uint32_t csc_diag = 1024;
+
+static void defe_load_csc_identity(void) {
+    defe_load_csc_diag(csc_diag);
+}
+
+void defe_set_csc_diag(uint32_t d) {
+    csc_diag = d;
+}
+
 void defe_reset(void) {
     /* PLL_VIDEO is already up at 297 MHz from sys_clk_init - the TVE needs
      * it - so the module clock only has to pick it and ungate. Divider 1:
@@ -116,6 +144,7 @@ void defe_reset(void) {
 
     defe_w(DEFE_EN, DEFE_EN_ENABLE);
     defe_load_coef();
+    defe_load_csc_identity();
 }
 
 void defe_init(void) {
@@ -130,8 +159,10 @@ void defe_start(const defe_cfg_t* c) {
     /* Engine owns the coefficient RAM while a frame runs. */
     defe_w(DEFE_EN, DEFE_EN_ENABLE);
 
-    defe_w(DEFE_BYPASS,
-           DEFE_BYPASS_CSC | (c->bypass ? DEFE_BYPASS_SCALER : 0u));
+    defe_w(DEFE_BYPASS, c->use_bits
+                            ? (uint32_t)c->bypass_bits
+                            : (DEFE_BYPASS_CSC |
+                               (c->bypass ? DEFE_BYPASS_SCALER : 0u)));
     defe_w(DEFE_AGTH_SEL, 2); /* 4:1, what the Lichee player uses */
 
     /* Input: NV12, two planes, chroma plane as wide as luma. */

@@ -111,6 +111,7 @@ static void dispatch(char c) {
     case 'E': enctest_probe_defe(); break;
     case 'F': enctest_scan_defe(); break;
     case 'G': enctest_time_chroma(); break;
+    case 'H': enctest_probe_coef(); break;
     case 'n': { /* NOR self-test: JEDEC id + first 4 KB of the fw slot vs RAM */
         static uint8_t rb[4096];
         uint32_t id = spinor_read_id();

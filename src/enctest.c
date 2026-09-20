@@ -568,14 +568,6 @@ void enctest_probe_planar(void) {
  * chroma along behind the luma instead of stopping at one plane. */
 #define DFE_WIN (DFE_YLEN * 2u)
 
-static int mem_same(uint32_t a, const uint8_t* b, uint32_t n) {
-    const uint8_t* p = (const uint8_t*)a;
-    uint32_t i;
-    for(i = 0; i < n; i++)
-        if(p[i] != b[i]) return 0;
-    return 1;
-}
-
 /* How many leading bytes of a wiped buffer the engine actually touched. */
 static uint32_t touched(uint32_t base, uint32_t n) {
     const uint8_t* p = (const uint8_t*)base;
@@ -588,7 +580,7 @@ static uint32_t touched(uint32_t base, uint32_t n) {
 void enctest_probe_defe(void) {
     static uint8_t u[DFE_PLEN], v[DFE_PLEN];
     uint32_t row, col, st, is, wy, w1, w2;
-    uint32_t f, m;
+    uint32_t m;
     int hits = 0;
 
     pipeline_freeze(1);
@@ -607,57 +599,75 @@ void enctest_probe_defe(void) {
     cache_clean_range(DFE_SY, DFE_SY + DFE_YLEN);
     cache_clean_range(DFE_SC, DFE_SC + DFE_CLEN);
 
-    /* The scan says this is a single-channel scaler into a single buffer, so
-     * the only thing left worth asking is whether it can carry ONE plane
-     * through untouched. At 1:1 a correct pass reproduces the source luma
-     * byte for byte. Two input interpretations are tried, because a
-     * single-channel block fed a semi-planar descriptor may or may not take
-     * the hint and read only the luma. */
-    printf("[defe] single-plane round trip, 1:1, %ux%u\r\n", (unsigned)DFE_W,
-           (unsigned)DFE_H);
-    for(m = 0; m < 2u; m++) {
-        uint32_t in = m ? (uint32_t)DEFE_IN_NV12
-                        : (DEFE_IN_MOD_PLANAR | DEFE_IN_FMT_YUV444);
-        printf("  in_fmt %03lx (%s):\r\n", (unsigned long)in,
-               m ? "NV12 semi-planar" : "planar, luma as one plane");
-        for(f = 0; f < 8u; f++) {
-            defe_cfg_t c = {0};
-            uint32_t i;
-            int rc, exact, nv12;
-            /* The sentinel window has to be wider than the plane we expect,
-             * or a format that writes MORE than one plane is indistinguish-
-             * able from one that writes exactly one. With a single write-
-             * back address, a two-plane output has nowhere to go except
-             * contiguously after the first - which is precisely the NV12
-             * layout, and precisely what we are hoping to find. */
-            defe_reset();
-            for(i = 0; i < DFE_WIN; i++) ((uint8_t*)DFE_D0)[i] = DFE_SENT;
-            cache_flush_range(DFE_D0, DFE_D0 + DFE_WIN);
-            c.src_y = DFE_SY;
-            c.src_c = DFE_SC;
-            c.sw = c.dw = DFE_W;
-            c.sh = c.dh = DFE_H;
-            c.dst0 = DFE_D0;
-            c.dst_strd0 = DFE_W;
-            c.out_fmt = (uint8_t)f;
-            c.out_ctrl = 1;
-            c.in_fmt = in;
-            defe_start(&c);
-            rc = defe_wait(200000, &st, &is);
-            cache_inv_range(DFE_D0, DFE_D0 + DFE_WIN);
-            wy = touched(DFE_D0, DFE_WIN);
-            exact = !rc && mem_same(DFE_D0, (const uint8_t*)DFE_SY, DFE_YLEN);
-            /* Contiguous NV12: the source chroma plane immediately after a
-             * correct luma plane. */
-            nv12 = exact && mem_same(DFE_D0 + DFE_YLEN, (const uint8_t*)DFE_SC,
-                                     DFE_CLEN);
-            if(exact) hits++;
-            printf("    fmt %lu: %-8s wrote %6lu  %s%s\r\n", (unsigned long)f,
-                   rc ? "TIMEOUT" : "done", (unsigned long)wy,
-                   exact ? "LUMA EXACT" : "not the source",
-                   nv12 ? " + CHROMA INTERLEAVED (NV12!)" : "");
-        }
+    /* Output never matched input, and it did not match with the FIR
+     * bypassed either - which rules the filter out and leaves the stage
+     * beside it. BYPASS holds two bits and only one of them has ever been
+     * varied here: the colour converter has been left bypassed on the
+     * strength of mainline's naming, never tested. Both bits are swept
+     * against every output format, 1:1, and an exact round trip is the only
+     * thing that counts. */
+    /* Does the engine read the source at all?
+     *
+     * Every sweep so far has asked "is the output the input", and the
+     * answer has always been no - which cannot distinguish an engine that
+     * transforms the data wrongly from one that never reads it. A constant
+     * source settles that in one step: if the output is uniform and its
+     * value tracks the input value, the read path works and only the
+     * transform is wrong. If the output is noise regardless of what the
+     * source holds, the engine is not reading our buffer.
+     */
+    /* Calibrate the colour matrix against the part.
+     *
+     * The constant-source test showed the engine does read our buffer - the
+     * output tracks the input - but every non-zero sample came out zero,
+     * which is what a unity coefficient that is not actually unity does.
+     * Mainline documents 10 fractional bits, making 1024 unity; that is
+     * evidently not the scale here. So the diagonal is swept and the value
+     * that carries a constant through unchanged is the right one. */
+    printf("[defe] CSC diagonal sweep, constant source 0x80, fmt 4\r\n");
+    for(m = 0; m < 8u; m++) {
+        static const uint32_t diag[8] = {0x20,  0x40,  0x80,  0x100,
+                                         0x200, 0x400, 0x800, 0x1000};
+        defe_cfg_t c = {0};
+        uint32_t i2;
+        int rc, uniform = 1;
+        const uint8_t* o = (const uint8_t*)DFE_D0;
+
+        for(i2 = 0; i2 < DFE_YLEN; i2++) ((uint8_t*)DFE_SY)[i2] = 0x80;
+        for(i2 = 0; i2 < DFE_CLEN; i2++) ((uint8_t*)DFE_SC)[i2] = 0x80;
+        cache_clean_range(DFE_SY, DFE_SY + DFE_YLEN);
+        cache_clean_range(DFE_SC, DFE_SC + DFE_CLEN);
+
+        defe_set_csc_diag(diag[m]);
+        defe_reset();
+        for(i2 = 0; i2 < DFE_WIN; i2++) ((uint8_t*)DFE_D0)[i2] = DFE_SENT;
+        cache_flush_range(DFE_D0, DFE_D0 + DFE_WIN);
+
+        c.src_y = DFE_SY;
+        c.src_c = DFE_SC;
+        c.sw = c.dw = DFE_W;
+        c.sh = c.dh = DFE_H;
+        c.dst0 = DFE_D0;
+        c.dst_strd0 = DFE_W;
+        c.out_fmt = 4;
+        c.out_ctrl = 1;
+        c.use_bits = 1;
+        c.bypass_bits = 0;
+        defe_start(&c);
+        rc = defe_wait(20000, &st, &is);
+        cache_inv_range(DFE_D0, DFE_D0 + DFE_WIN);
+        wy = touched(DFE_D0, DFE_WIN);
+        for(i2 = 1; i2 < DFE_YLEN; i2++)
+            if(o[i2] != o[0]) { uniform = 0; break; }
+        printf("  diag %04lx -> %s wrote %6lu  out[0]=%02x %s%s\r\n",
+               (unsigned long)diag[m], rc ? "TO  " : "done",
+               (unsigned long)wy, (unsigned)o[0],
+               uniform ? "UNIFORM" : "varies",
+               (uniform && o[0] == 0x80) ? "  <== UNITY" : "");
+        if(uniform && o[0] == 0x80) hits++;
     }
+    defe_set_csc_diag(1024);
+
     (void)w1;
     (void)w2;
     (void)u;
@@ -803,5 +813,78 @@ void enctest_time_chroma(void) {
                (unsigned long)((uint64_t)CHR_DW * CHR_DH * reps /
                                (us ? us : 1u)));
     }
+    pipeline_freeze(0);
+}
+
+/* ---- where does the coefficient RAM actually live? ----------------------
+ *
+ * The frontend runs, completes passes and DMAs correctly, but no
+ * configuration reproduces its input - and the one clue is that reading
+ * back the first horizontal coefficient returns something that was written
+ * somewhere else entirely (0x00004000, which is vert_coef[0], and on
+ * another run 0x0000ff03, which is horz_coef[3]). Mainline describes six
+ * flat 32-word banks at 0x400, 0x480, 0x500, 0x600, 0x680 and 0x700. If
+ * that were the layout here, a word written to an offset would read back
+ * from that offset.
+ *
+ * So rather than trust the layout, each word in the region is stamped with
+ * its own offset and the whole region read back. Three outcomes tell three
+ * different stories: every word reading its own offset means flat RAM and
+ * the fault is elsewhere; one value everywhere means a single data port
+ * behind an index register; a repeating pattern means a smaller RAM
+ * aliased across the window.
+ */
+void enctest_probe_coef(void) {
+    uint32_t off, bad = 0, n = 0;
+    static const uint32_t bank[] = {0x400, 0x480, 0x500, 0x600, 0x680, 0x700};
+    unsigned b, k;
+
+    pipeline_freeze(1);
+    defe_init();
+
+    /* Does the window hold bits at all, under the same gating the loader
+     * uses? Without this a region that simply is not there looks identical
+     * to one that is there and misbehaving. */
+    defe_w(DEFE_EN, DEFE_EN_ENABLE | DEFE_EN_BIST);
+    defe_w(DEFE_FRM_CTRL, defe_r(DEFE_FRM_CTRL) | DEFE_FRM_COEF_ACC);
+
+    for(off = 0x400; off <= 0x7fc; off += 4) {
+        uint32_t a, b2;
+        defe_w(off, 0xFFFFFFFFu);
+        a = defe_r(off);
+        defe_w(off, 0x00000000u);
+        b2 = defe_r(off);
+        if(a ^ b2) n++;
+    }
+    printf("[coef] %lu of 256 words in 0x400..0x7fc hold bits\r\n",
+           (unsigned long)n);
+
+    /* Stamp every word with its own offset, then read the region back. */
+    for(off = 0x400; off <= 0x7fc; off += 4)
+        defe_w(off, off);
+    for(off = 0x400; off <= 0x7fc; off += 4) {
+        if(defe_r(off) != off) bad++;
+    }
+    printf("[coef] %lu of 256 words read back something other than their own "
+           "offset\r\n", (unsigned long)bad);
+
+    for(b = 0; b < sizeof bank / sizeof bank[0]; b++) {
+        printf("  bank %03lx:", (unsigned long)bank[b]);
+        for(k = 0; k < 6; k++)
+            printf(" %08lx", (unsigned long)defe_r(bank[b] + k * 4));
+        printf("\r\n");
+    }
+
+    defe_w(DEFE_FRM_CTRL, defe_r(DEFE_FRM_CTRL) & ~DEFE_FRM_COEF_ACC);
+    defe_w(DEFE_EN, DEFE_EN_ENABLE);
+
+    /* And the same read with access revoked: if the gating is real the
+     * values should change or stop responding. */
+    printf("  ungated  :");
+    for(k = 0; k < 6; k++)
+        printf(" %08lx", (unsigned long)defe_r(0x400 + k * 4));
+    printf("\r\n");
+
+    defe_reset();
     pipeline_freeze(0);
 }
