@@ -523,3 +523,195 @@ void enctest_probe_planar(void) {
         printf("[isp] control ok, no match in 64 - the VE will not read planar\r\n");
     pipeline_freeze(0);
 }
+
+/* ---- display-engine frontend probe: what does each write-back format do? -
+ *
+ * The frontend is the only scaler on this part, and the ISP probe above
+ * showed the VE will read nothing but semi-planar. So the whole question of
+ * hardware scaling now rests on one field: OUTPUT_FMT's 3-bit data_fmt.
+ * Allwinner's enum names seven of its eight values - 0,1,2 for RGB and
+ * 4,5,6,7 for planar YUV 444/420/422/411 - and leaves 3 unnamed. If 3 is a
+ * UV-combined write-back the frontend can feed the VE directly and the
+ * peripherals-only path opens. If it is not, nothing else in the field is.
+ *
+ * Reading the value is not enough; the register is write-only in effect, so
+ * the test is what lands in DRAM. Each pass runs at 1:1 with the FIR
+ * bypassed, so the output is a pure format conversion and can be compared
+ * byte for byte against layouts we construct ourselves. Bypassing the
+ * filter also separates the two questions: this probe asks what shape the
+ * output is, not how good the resampling looks.
+ *
+ * The destination is wiped with a sentinel before every pass, so a format
+ * that writes nothing is distinguishable from one that writes garbage - the
+ * same trick that sorted out first light on the VE.
+ *
+ * 320x240 rather than 720p: a format is a format at any size, and small
+ * keeps the whole thing inside the bench region and fast enough to sweep.
+ */
+#include "defe.h"
+
+#define DFE_W 320u
+#define DFE_H 240u
+/* Sub-buffers inside the ISP probe's chroma slot. The two probes are both
+ * bench commands and never run at the same time, so sharing costs nothing
+ * and keeps the bench region within the size the _Static_assert guards. */
+#define DFE_SY (PRB_C + 0x00000u) /* source luma,   320x240 */
+#define DFE_SC (PRB_C + 0x14000u) /* source chroma, NV12    */
+#define DFE_D0 (PRB_C + 0x20000u) /* write-back plane 0     */
+#define DFE_D1 (PRB_C + 0x34000u) /* write-back plane 1     */
+#define DFE_D2 (PRB_C + 0x40000u) /* write-back plane 2     */
+#define DFE_YLEN (DFE_W * DFE_H)
+#define DFE_CLEN (DFE_YLEN / 2u)  /* NV12 chroma plane      */
+#define DFE_PLEN (DFE_YLEN / 4u)  /* one planar chroma      */
+#define DFE_SENT 0xC7u
+/* Twice the luma plane: wide enough to catch a write-back that carries
+ * chroma along behind the luma instead of stopping at one plane. */
+#define DFE_WIN (DFE_YLEN * 2u)
+
+static int mem_same(uint32_t a, const uint8_t* b, uint32_t n) {
+    const uint8_t* p = (const uint8_t*)a;
+    uint32_t i;
+    for(i = 0; i < n; i++)
+        if(p[i] != b[i]) return 0;
+    return 1;
+}
+
+/* How many leading bytes of a wiped buffer the engine actually touched. */
+static uint32_t touched(uint32_t base, uint32_t n) {
+    const uint8_t* p = (const uint8_t*)base;
+    uint32_t i, last = 0;
+    for(i = 0; i < n; i++)
+        if(p[i] != DFE_SENT) last = i + 1;
+    return last;
+}
+
+void enctest_probe_defe(void) {
+    static uint8_t u[DFE_PLEN], v[DFE_PLEN];
+    uint32_t row, col, st, is, wy, w1, w2;
+    uint32_t f, m;
+    int hits = 0;
+
+    pipeline_freeze(1);
+    defe_init();
+    printf("[defe] en=%08lx coef=%08lx\r\n", (unsigned long)defe_r(DEFE_EN),
+           (unsigned long)defe_coef_readback());
+
+    testpat_bars_nv12((uint8_t*)DFE_SY, (uint8_t*)DFE_SC, DFE_W, DFE_H);
+    for(row = 0; row < DFE_H / 2u; row++) {
+        const uint8_t* s2 = (const uint8_t*)DFE_SC + row * DFE_W;
+        for(col = 0; col < DFE_W / 2u; col++) {
+            u[row * (DFE_W / 2u) + col] = s2[2 * col];
+            v[row * (DFE_W / 2u) + col] = s2[2 * col + 1];
+        }
+    }
+    cache_clean_range(DFE_SY, DFE_SY + DFE_YLEN);
+    cache_clean_range(DFE_SC, DFE_SC + DFE_CLEN);
+
+    /* The scan says this is a single-channel scaler into a single buffer, so
+     * the only thing left worth asking is whether it can carry ONE plane
+     * through untouched. At 1:1 a correct pass reproduces the source luma
+     * byte for byte. Two input interpretations are tried, because a
+     * single-channel block fed a semi-planar descriptor may or may not take
+     * the hint and read only the luma. */
+    printf("[defe] single-plane round trip, 1:1, %ux%u\r\n", (unsigned)DFE_W,
+           (unsigned)DFE_H);
+    for(m = 0; m < 2u; m++) {
+        uint32_t in = m ? (uint32_t)DEFE_IN_NV12
+                        : (DEFE_IN_MOD_PLANAR | DEFE_IN_FMT_YUV444);
+        printf("  in_fmt %03lx (%s):\r\n", (unsigned long)in,
+               m ? "NV12 semi-planar" : "planar, luma as one plane");
+        for(f = 0; f < 8u; f++) {
+            defe_cfg_t c = {0};
+            uint32_t i;
+            int rc, exact, nv12;
+            /* The sentinel window has to be wider than the plane we expect,
+             * or a format that writes MORE than one plane is indistinguish-
+             * able from one that writes exactly one. With a single write-
+             * back address, a two-plane output has nowhere to go except
+             * contiguously after the first - which is precisely the NV12
+             * layout, and precisely what we are hoping to find. */
+            defe_reset();
+            for(i = 0; i < DFE_WIN; i++) ((uint8_t*)DFE_D0)[i] = DFE_SENT;
+            cache_flush_range(DFE_D0, DFE_D0 + DFE_WIN);
+            c.src_y = DFE_SY;
+            c.src_c = DFE_SC;
+            c.sw = c.dw = DFE_W;
+            c.sh = c.dh = DFE_H;
+            c.dst0 = DFE_D0;
+            c.dst_strd0 = DFE_W;
+            c.out_fmt = (uint8_t)f;
+            c.out_ctrl = 1;
+            c.in_fmt = in;
+            defe_start(&c);
+            rc = defe_wait(200000, &st, &is);
+            cache_inv_range(DFE_D0, DFE_D0 + DFE_WIN);
+            wy = touched(DFE_D0, DFE_WIN);
+            exact = !rc && mem_same(DFE_D0, (const uint8_t*)DFE_SY, DFE_YLEN);
+            /* Contiguous NV12: the source chroma plane immediately after a
+             * correct luma plane. */
+            nv12 = exact && mem_same(DFE_D0 + DFE_YLEN, (const uint8_t*)DFE_SC,
+                                     DFE_CLEN);
+            if(exact) hits++;
+            printf("    fmt %lu: %-8s wrote %6lu  %s%s\r\n", (unsigned long)f,
+                   rc ? "TIMEOUT" : "done", (unsigned long)wy,
+                   exact ? "LUMA EXACT" : "not the source",
+                   nv12 ? " + CHROMA INTERLEAVED (NV12!)" : "");
+        }
+    }
+    (void)w1;
+    (void)w2;
+    (void)u;
+    (void)v;
+    if(hits)
+        printf("[defe] %d exact - the frontend is a usable single-plane "
+               "scaler\r\n", hits);
+    else
+        printf("[defe] nothing round-trips; no usable configuration found\r\n");
+    pipeline_freeze(0);
+}
+
+/* ---- which frontend registers does THIS silicon actually implement? -----
+ *
+ * The register map was taken from mainline's sun4i frontend, Allwinner's
+ * sun7i BSP and a Lichee Nano player, on the assumption that suniv carries
+ * the same block. Mostly it does - the input side reads back every value
+ * written to it. The write-back side does not: WB_ADDR1, WB_STRD_EN and
+ * WB_STRD0 all read zero straight after being written, which is what an
+ * unimplemented register looks like.
+ *
+ * That distinction decides the whole question. Three write-back addresses
+ * with three strides is a planar sink; one address is a packed one. So this
+ * walks the register file and reports which bits are actually storage,
+ * rather than inferring it from a relative's documentation.
+ *
+ * EN and FRM_CTRL are excluded: writing ones to those starts a frame, and a
+ * frame started with a scan pattern in the address registers would DMA over
+ * whatever the addresses happen to point at.
+ */
+void enctest_scan_defe(void) {
+    uint32_t off;
+    int n = 0;
+
+    pipeline_freeze(1);
+    defe_init();
+    printf("[defe] register scan 0x008..0x2fc (EN and FRM_CTRL skipped)\r\n");
+    for(off = 0x008; off <= 0x2fc; off += 4) {
+        uint32_t orig = defe_r(off), a, b, mask;
+        defe_w(off, 0xFFFFFFFFu);
+        a = defe_r(off);
+        defe_w(off, 0x00000000u);
+        b = defe_r(off);
+        defe_w(off, orig);
+        mask = a ^ b;
+        if(mask) {
+            if((n & 3) == 0) printf("   ");
+            printf(" %03lx:%08lx", (unsigned long)off, (unsigned long)mask);
+            if((++n & 3) == 0) printf("\r\n");
+        }
+    }
+    if(n & 3) printf("\r\n");
+    printf("[defe] %d registers hold bits; anything absent above reads back "
+           "zero and is not implemented here\r\n", n);
+    defe_reset();
+    pipeline_freeze(0);
+}

@@ -103,6 +103,8 @@ static void dispatch(char c) {
     case '7': enctest_set_fmt((uint8_t)(c - '0')); break;
     case 'v': enctest_info(); break;
     case 'I': enctest_probe_planar(); break;
+    case 'E': enctest_probe_defe(); break;
+    case 'F': enctest_scan_defe(); break;
     case 'n': { /* NOR self-test: JEDEC id + first 4 KB of the fw slot vs RAM */
         static uint8_t rb[4096];
         uint32_t id = spinor_read_id();
@@ -116,7 +118,7 @@ static void dispatch(char c) {
     }
     default:
         printf("? s state, r reset | VE: j enc+dump, J enc, q quality, m fmt, v info, "
-               "I planar probe\r\n");
+               "I planar, E defe, F defe regs\r\n");
         break;
     }
 }

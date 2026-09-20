@@ -26,3 +26,5 @@ void enctest_rawdump(void);       /* 'p': decimated raw capture planes */
 void enctest_copy_encode(void);   /* 'x': CPU-copy capture frame, encode via testpat path */
 void enctest_info(void);          /* 'v': VE version + status registers */
 void enctest_probe_planar(void);  /* 'I': sweep the ISP format field for planar 4:2:0 */
+void enctest_probe_defe(void);    /* 'E': sweep the frontend write-back format field */
+void enctest_scan_defe(void);     /* 'F': which frontend registers exist on this part */
