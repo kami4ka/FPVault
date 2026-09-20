@@ -26,11 +26,13 @@ SRCS += src/main.c src/system.c src/exception.c src/console.c src/capture.c \
         src/usbdfu.c src/spinor.c \
         vendor/cherryusb/core/usbd_core.c \
         vendor/cherryusb/class/msc/usbd_msc.c \
+        vendor/cherryusb/class/video/usbd_video.c \
         vendor/cherryusb/port/usb_dc_musb.c \
         vendor/fatfs/ff.c vendor/fatfs/ffsystem.c vendor/fatfs/ffunicode.c
 
 INCLUDES += -Ivendor/fatfs -Ivendor/cherryusb -Ivendor/cherryusb/common \
             -Ivendor/cherryusb/core -Ivendor/cherryusb/class/msc \
+            -Ivendor/cherryusb/class/video \
             -Ivendor/cherryusb/port
 
 INCLUDES += -Isrc

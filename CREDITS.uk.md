@@ -28,7 +28,7 @@
 - **[linux-sunxi.org](https://linux-sunxi.org)** — документація регістрів
   Video Engine і зусилля з реверс-інжинірингу CedarX.
 - **[CherryUSB](https://github.com/cherry-embedded/CherryUSB)** v1.2.0
-  (Apache-2.0) — USB-стек пристрою (ядро + клас MSC + порт MUSB),
+  (Apache-2.0) — USB-стек пристрою (ядро + класи MSC і video + порт MUSB),
   вендорований у `vendor/cherryusb/` з правками конфігурації під bare metal
   і доданим READ CAPACITY(16); зміни позначені в заголовках файлів.
 - **[lhdjply/f1c200s_library](https://github.com/lhdjply/f1c200s_library)**

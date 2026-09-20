@@ -27,7 +27,8 @@ This firmware stands on prior work:
 - **[linux-sunxi.org](https://linux-sunxi.org)** — Video Engine register
   documentation and the CedarX reverse-engineering effort.
 - **[CherryUSB](https://github.com/cherry-embedded/CherryUSB)** v1.2.0
-  (Apache-2.0) — USB device stack (core + MSC class + MUSB port), vendored
+  (Apache-2.0) — USB device stack (core + MSC and video classes + MUSB
+  port), vendored
   under `vendor/cherryusb/` with bare-metal config tweaks and a
   READ CAPACITY(16) addition noted in the file headers.
 - **[lhdjply/f1c200s_library](https://github.com/lhdjply/f1c200s_library)**
