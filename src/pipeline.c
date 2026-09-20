@@ -11,6 +11,7 @@
 #include "board.h"
 #include "pipeline.h"
 #include "capture.h"
+#include "jpegtab.h"
 #include "vejpeg.h"
 #include "recorder.h"
 #include "f1c100s_timer.h"
@@ -120,6 +121,32 @@ void pipeline_tick(void) {
         follow_div = 0;
         capture_follow_input();
     }
+}
+
+uint32_t pipeline_finish_jpeg(uint32_t slot_base, uint32_t bitstream_len, int quality) {
+    /* Recomputed only when quality or geometry changes; the block is a pure
+     * function of those two, so it is staged once and memcpy'd into each
+     * rotating slot. */
+    static uint8_t hdr[JPEGTAB_HDR_LEN];
+    static uint16_t staged_h = 0;
+    static int staged_quality = -1;
+    uint8_t* slot = (uint8_t*)slot_base;
+    uint16_t h = capture_height();
+    uint32_t i;
+
+    if(quality != staged_quality || h != staged_h) {
+        uint16_t qY[64], qC[64];
+        jpegtab_quant(quality, qY, qC);
+        jpegtab_headers(hdr, qY, qC, CAP_FW, h, 1);
+        staged_quality = quality;
+        staged_h = h;
+    }
+    for(i = 0; i < JPEGTAB_HDR_LEN; i++)
+        slot[BSRING_PREFIX_OFF + i] = hdr[i];
+
+    slot[BSRING_DATA_OFF + bitstream_len] = 0xFF;
+    slot[BSRING_DATA_OFF + bitstream_len + 1] = 0xD9;
+    return JPEGTAB_HDR_LEN + bitstream_len + 2u;
 }
 
 void pipeline_consume(void) {

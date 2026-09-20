@@ -23,6 +23,21 @@ void pipeline_stats(void);      /* 1 Hz line */
 int pipeline_active(void);
 int pipeline_quality(void);
 
+/* Turn a ring slot into a standalone JPEG, in place, and return its length.
+ *
+ * The VE emits entropy-coded scan data only, so a playable frame needs the
+ * 608-byte SOI..SOS block in front of it and an EOI behind. Every sink wants
+ * exactly that and nothing more: the recorder then wraps it in an AVI chunk,
+ * and a USB video interface would hand the same bytes straight to the host,
+ * since UVC's MJPEG payload is one whole JPEG per frame and needs the DHT
+ * segments this block carries.
+ *
+ * The file starts at slot_base + BSRING_PREFIX_OFF. 416 + 608 = 1024 exactly,
+ * so the header abuts the VE's own output and the result is contiguous - the
+ * payload is never copied.
+ */
+uint32_t pipeline_finish_jpeg(uint32_t slot_base, uint32_t bitstream_len, int quality);
+
 /* Newest encoded frame (for the console JPEG dump): returns 0 if none,
  * else fills the physical address of the bitstream and its length. */
 int pipeline_last(uint32_t* phys, uint32_t* len);

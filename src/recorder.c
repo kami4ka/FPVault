@@ -9,7 +9,6 @@
 #include "recorder.h"
 #include "avi.h"
 #include "dcf.h"
-#include "jpegtab.h"
 #include "capture.h"
 #include "pipeline.h"
 #include "usbmsc.h"
@@ -83,7 +82,6 @@ static dcf_t dcf;
 static rec_state_e state = REC_NO_CARD;
 static uint8_t auto_record = 1;
 static uint8_t clip_open = 0, dcf_ready = 0;
-static int staged_quality = -1;
 static uint32_t frames_written = 0, drops = 0, wr_us_max = 0;
 static uint32_t last_refresh_frame = 0;
 static uint32_t seg_count = 0;
@@ -144,7 +142,6 @@ static int clip_start(void) {
             return -1;
         }
     }
-    staged_quality = -1;
     frames_written = 0;
     drops = 0;
     wr_us_max = 0;
@@ -304,26 +301,10 @@ void recorder_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) 
         }
     }
 
-    /* Stage the full JPEG header block (SOI..SOS). Recompute on quality or
-     * geometry change, copy always (608 B; each rotating slot needs it). */
-    {
-        static uint8_t hdr[JPEGTAB_HDR_LEN];
-        static uint16_t staged_h = 0;
-        uint16_t h = capture_height();
-        if(quality != staged_quality || h != staged_h) {
-            uint16_t qY[64], qC[64];
-            jpegtab_quant(quality, qY, qC);
-            jpegtab_headers(hdr, qY, qC, CAP_FW, h, 1);
-            staged_quality = quality;
-            staged_h = h;
-        }
-        for(i = 0; i < JPEGTAB_HDR_LEN; i++)
-            slot[BSRING_PREFIX_OFF + i] = hdr[i];
-    }
+    jpeg_len = pipeline_finish_jpeg(slot_base, bitstream_len, quality);
 
-    jpeg_len = JPEGTAB_HDR_LEN + bitstream_len + 2u;
-    slot[BSRING_DATA_OFF + bitstream_len] = 0xFF;
-    slot[BSRING_DATA_OFF + bitstream_len + 1] = 0xD9;
+    /* The pad is AVI's, not the JPEG's: it sits past EOI so the next chunk
+     * starts word-aligned, and avi_add_raw requires it zeroed. */
     pad = (4u - (jpeg_len & 3u)) & 3u;
     for(i = 0; i < pad; i++)
         slot[BSRING_DATA_OFF + bitstream_len + 2u + i] = 0;
