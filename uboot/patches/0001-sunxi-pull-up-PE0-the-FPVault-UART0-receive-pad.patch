@@ -1,0 +1,20 @@
+diff --git a/arch/arm/mach-sunxi/board.c b/arch/arm/mach-sunxi/board.c
+index 432b1c10..3744be80 100644
+--- a/arch/arm/mach-sunxi/board.c
++++ b/arch/arm/mach-sunxi/board.c
+@@ -103,6 +103,15 @@ static int gpio_init(void)
+ 	sunxi_gpio_set_cfgpin(SUNXI_GPE(0), SUNIV_GPE_UART0);
+ 	sunxi_gpio_set_cfgpin(SUNXI_GPE(1), SUNIV_GPE_UART0);
+ 	sunxi_gpio_set_pull(SUNXI_GPE(1), SUNXI_GPIO_PULL_UP);
++	/*
++	 * FPVault board: PE0 is the receive pad here, not PE1, and it has no
++	 * external pull-up - only a 1k series resistor to an open pad.
++	 * Measured over FEL with the pin as an input: floating with no pull it
++	 * reads a steady 0, which a UART sees as a permanent break condition.
++	 * The internal pull-up holds it at 1 cleanly. Pulling up both costs
++	 * nothing, since the other one is a driven output.
++	 */
++	sunxi_gpio_set_pull(SUNXI_GPE(0), SUNXI_GPIO_PULL_UP);
+ #elif CONFIG_CONS_INDEX == 1 && (defined(CONFIG_MACH_SUN4I) || \
+ 				 defined(CONFIG_MACH_SUN7I) || \
+ 				 defined(CONFIG_MACH_SUN8I_R40))

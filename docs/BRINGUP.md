@@ -93,13 +93,42 @@ U-Boot from source instead (mainline v2026.07 + the two files in
 git clone --depth 1 -b v2026.07 https://source.denx.de/u-boot/u-boot.git
 cp uboot/f1c200s_dvr_defconfig          u-boot/configs/
 cp uboot/suniv-f1c200s-video-board.dts  u-boot/dts/upstream/src/arm/allwinner/
+git -C u-boot apply ../f1c200_dvr_board/uboot/patches/*.patch
 make -C u-boot f1c200s_dvr_defconfig
 make -C u-boot CROSS_COMPILE=arm-none-eabi- -j8
 # result: u-boot/u-boot-sunxi-with-spl.bin
 ```
 
+**The patch is not optional.** Without it the board only boots while
+something external holds UART0's receive pad high, which in practice means
+a serial adapter plugged in — see the PE0 entry in
+[HARDWARE-ERRATA.md](HARDWARE-ERRATA.md).
+
 The defconfig carries the whole boot story: `CONFIG_BOOTCOMMAND="sf probe;
 sf read 0x80000000 0x100000 0x40000; go 0x80000000"`, 1 s autoboot delay.
+
+### Building on macOS
+
+Three things in U-Boot's build assume a GNU userland and need help:
+
+```sh
+brew install make bash dtc openssl@3
+gmake -C u-boot CROSS_COMPILE=arm-none-eabi- -j8 \
+  HOSTCFLAGS="-I$(brew --prefix openssl@3)/include" \
+  HOSTLDFLAGS="-L$(brew --prefix openssl@3)/lib"
+```
+
+`gmake` because the Makefile needs GNU make 4 and macOS ships 3.81. The
+OpenSSL paths because the host tools include `openssl/evp.h` and macOS
+ships no OpenSSL headers. `bash` because `scripts/check-local-export` uses
+`shopt -s lastpipe`, which needs bash 4 against the system's 3.2 — that one
+is a lint over exported symbols, so a build that cannot get bash 4 can
+neutralise it without affecting the image.
+
+One further trap if the build reaches `scripts/dtc/pylibfdt`: SWIG 4.5
+generates Python 2 calls that no longer compile, so it needs SWIG 4.4 or
+earlier, and the extension must link with `-undefined dynamic_lookup`,
+which is what the `HOSTLDFLAGS` above is really for.
 
 ## M1 — VE first light (go/no-go)
 

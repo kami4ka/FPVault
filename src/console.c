@@ -128,9 +128,32 @@ static void dispatch(char c) {
  * phantom commands improbable; anything unarmed is dropped silently. */
 void console_poll(void) {
     static uint8_t armed = 0;
+    uint32_t lsr;
     char c;
-    if(!(read32(UART0 + UART_LSR) & UART_LSR_DR)) return;
+
+    /* LSR is read before RBR on purpose: in FIFO mode the framing, parity
+     * and break bits describe the character currently at the head of the
+     * FIFO - the one the next RBR read returns - and reading LSR clears
+     * them. Taking RBR first would throw that away. */
+    lsr = read32(UART0 + UART_LSR);
+    if(!(lsr & UART_LSR_DR)) return;
     c = (char)(read32(UART0 + UART_RBR) & 0xFF);
+
+    /* Bytes that a floating RX pin invents are not valid serial frames:
+     * noise has no start bit at the right moment and no stop bit where one
+     * belongs, so it arrives with FE, PE or BI set, and a line that rattles
+     * faster than this poll sets OE too. A real terminal's characters set
+     * none of them. Dropping those is what makes an unplugged console
+     * harmless rather than a source of commands.
+     *
+     * The arming is dropped with the byte. Otherwise a noise ':' could sit
+     * armed waiting for the next byte, and the two halves of a phantom
+     * command would not even have to arrive in the same burst. */
+    if(lsr & (UART_LSR_FE | UART_LSR_PE | UART_LSR_BI | UART_LSR_OE)) {
+        armed = 0;
+        return;
+    }
+
     if(armed) {
         armed = 0;
         dispatch(c);

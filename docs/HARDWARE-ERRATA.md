@@ -83,6 +83,39 @@ directly.
   reported no-signal on a textbook 1 Vpp waveform at the pin. Moving R31
   to the R33/C33 junction (same divider, same 1 Vpp, pin side floating)
   locked instantly: status 0x0E, 30 fps, first recording on the board.
+- **UART0's receive pad has no pull-up, and the board will not boot without
+  one.** PE0 is the receive pad on this board, and the schematic gives it a
+  1 kΩ series resistor (R18) to an open pad and nothing else. Port E leaves
+  reset with every pin disabled and no pull, so until code configures it
+  nothing defines that node. Measured over FEL with PE0 driven as an input:
+  floating with no pull it reads a steady 0, the internal pull-up holds it
+  at 1, and an internal pull-down also reads 0 — so the pad is genuinely
+  undriven, not shorted. A receive line held at 0 is an unending break
+  condition.
+
+  Upstream U-Boot does pull up its console receive pin, but it pulls up
+  **PE1**, because upstream takes PE1 for receive. On this board PE1 is the
+  transmit pin, so that pull-up lands on a driven output and the real
+  receive pin is left floating. The board therefore only booted while
+  something external held the line high — in practice a serial adapter,
+  whose idle transmit pin was doing the job. It did not have to be a working
+  serial bridge: a Flipper unplugged from any computer was enough, which is
+  what made this look like a logic problem rather than a DC one.
+
+  Fixed in `uboot/patches/0001-*`, which pulls up PE0 in `gpio_init()`. That
+  runs from `board_init_f` in the SPL, before the console exists, so the pin
+  is defined from the earliest moment any code runs. Proven by a control
+  build: same tree, same config, same environment, that one instruction
+  removed, and the board stops booting.
+
+  Fix for the next spin: a 10 kΩ pull-up from the UART0 receive net to 3V3,
+  so the pad is defined by the board rather than by firmware.
+
+  Two firmware changes went in alongside and are worth keeping, but neither
+  was the cause and neither fixed it: `sys_uart_init` now pulls PE0 up
+  rather than asking for no pull, and `console_poll` drops bytes that arrive
+  with a framing, parity, break or overrun flag. Both only matter once the
+  firmware is running, and the failure was two stages earlier.
 - **Reflow the QFN before doubting anything else.** The first FPVault v1 board
   spent two days "dead" - no FEL, rails and crystal fine, every IC warm,
   the SoC swapped twice - with the RESET pin floating at the QFN side

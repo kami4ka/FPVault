@@ -93,13 +93,42 @@ U-Boot самостійно (мейнлайн v2026.07 + два файли з `u
 git clone --depth 1 -b v2026.07 https://source.denx.de/u-boot/u-boot.git
 cp uboot/f1c200s_dvr_defconfig          u-boot/configs/
 cp uboot/suniv-f1c200s-video-board.dts  u-boot/dts/upstream/src/arm/allwinner/
+git -C u-boot apply ../f1c200_dvr_board/uboot/patches/*.patch
 make -C u-boot f1c200s_dvr_defconfig
 make -C u-boot CROSS_COMPILE=arm-none-eabi- -j8
 # результат: u-boot/u-boot-sunxi-with-spl.bin
 ```
 
+**Патч не є необов'язковим.** Без нього плата завантажується лише поки щось
+зовнішнє тримає майданчик прийому UART0 високим, а на практиці це означає
+під'єднаний послідовний перехідник — див. запис про PE0 у
+[HARDWARE-ERRATA.uk.md](HARDWARE-ERRATA.uk.md).
+
 Уся історія завантаження — в defconfig: `CONFIG_BOOTCOMMAND="sf probe;
 sf read 0x80000000 0x100000 0x40000; go 0x80000000"`, автозапуск за 1 с.
+
+### Збірка на macOS
+
+Три речі у збірці U-Boot розраховують на GNU-оточення й потребують допомоги:
+
+```sh
+brew install make bash dtc openssl@3
+gmake -C u-boot CROSS_COMPILE=arm-none-eabi- -j8 \
+  HOSTCFLAGS="-I$(brew --prefix openssl@3)/include" \
+  HOSTLDFLAGS="-L$(brew --prefix openssl@3)/lib"
+```
+
+`gmake` — бо Makefile потребує GNU make 4, а macOS постачає 3.81. Шляхи до
+OpenSSL — бо хостові утиліти підключають `openssl/evp.h`, а заголовків
+OpenSSL у macOS немає. `bash` — бо `scripts/check-local-export` використовує
+`shopt -s lastpipe`, для чого потрібен bash 4 проти системного 3.2; це лише
+лінтер експортованих символів, тож збірка без bash 4 може його знешкодити
+без впливу на образ.
+
+Ще одна пастка, якщо збірка дійде до `scripts/dtc/pylibfdt`: SWIG 4.5
+генерує виклики Python 2, які вже не компілюються, тож потрібен SWIG 4.4 або
+старіший, а розширення має лінкуватися з `-undefined dynamic_lookup` — саме
+для цього насправді й потрібні `HOSTLDFLAGS` вище.
 
 ## M1 — перше світло VE (go/no-go)
 

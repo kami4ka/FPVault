@@ -91,7 +91,29 @@ static void sys_clk_init(void) {
 }
 
 static void sys_uart_init(void) {
-    gpio_init(GPIOE, PIN0 | PIN1, GPIO_MODE_AF5, GPIO_PULL_NONE, GPIO_DRV_3);
+    /* PE0 is the receive input, and with nothing plugged in it is an open
+     * pad: the schematic gives it a 1k series resistor (R18) and no pull-up
+     * anywhere on the net. gpio_pin_init writes the pull bits
+     * unconditionally, so asking for PULL_NONE here does not leave the pin
+     * alone - it actively floats it.
+     *
+     * A floating CMOS input sitting beside three switching regulators and a
+     * 24 MHz crystal frames noise into bytes, and console_poll acts on what
+     * it reads. The command table can reset the board, stop TVD capture and
+     * scrub the card, so the cost of a phantom pair is not cosmetic - which
+     * is already why commands need a ':' prefix at all. Pulled up, an
+     * unplugged line idles high and frames nothing.
+     *
+     * U-Boot does the same thing for its console, but on PE1: upstream
+     * takes PE1 for the receive pin, and on this board that is the
+     * transmit. So U-Boot's own 1 s autoboot window is still exposed to a
+     * floating PE0, and a stray byte there stops autoboot before the
+     * firmware is ever reached. That one needs fixing in the defconfig, not
+     * here.
+     *
+     * PE1 is a driven output and needs no pull of its own. */
+    gpio_init(GPIOE, PIN0, GPIO_MODE_AF5, GPIO_PULL_UP, GPIO_DRV_3);
+    gpio_init(GPIOE, PIN1, GPIO_MODE_AF5, GPIO_PULL_NONE, GPIO_DRV_3);
     clk_enable(CCU_BUS_CLK_GATE2, 20); // uart0 clock gate
     clk_reset_clear(CCU_BUS_SOFT_RST2, 20); // deassert uart0 reset
     uart_init(UART0, 115200);
