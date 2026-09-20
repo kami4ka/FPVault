@@ -14,6 +14,7 @@
 #include "jpegtab.h"
 #include "vejpeg.h"
 #include "recorder.h"
+#include "usbuvc.h"
 #include "f1c100s_timer.h"
 
 static uint8_t on = 0, cap_started = 0;
@@ -153,6 +154,7 @@ void pipeline_consume(void) {
     while(tail != head) {
         uint32_t i = tail % BSRING_SLOTS;
         recorder_on_frame(slot_base(tail), slot_len[i], cfg.quality);
+        usbuvc_on_frame(slot_base(tail), slot_len[i], cfg.quality);
         tail++;
     }
 }

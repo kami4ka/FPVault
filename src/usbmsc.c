@@ -178,6 +178,8 @@ void usbmsc_init(void) {
                                               UVC_MAX_FRAME_SIZE, UVC_MAX_MPS));
     usbd_add_interface(0, usbd_video_init_intf(0, &intf3, UVC_INTERVAL_NTSC,
                                               UVC_MAX_FRAME_SIZE, UVC_MAX_MPS));
+    usbuvc_hook_notify(&intf2, &intf3);
+    usbuvc_register();
     spinor_init();
     usbd_initialize(0, USBD_BASE, usbd_event_handler);
     printf("[usb] device mode up (MSC + DFU + UVC, %s)\r\n",

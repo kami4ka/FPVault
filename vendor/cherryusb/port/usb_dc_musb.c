@@ -101,6 +101,9 @@ struct musb_ep_state {
     uint8_t *xfer_buf;
     uint32_t xfer_len;
     uint32_t actual_xfer_len;
+    /* FPVault: byte offset of this endpoint's slice of the shared FIFO RAM,
+     * 0 meaning not yet allocated. See the note in usbd_ep_open. */
+    uint32_t fifo_addr;
 };
 
 /* Driver state */
@@ -346,10 +349,26 @@ int usbd_ep_open(uint8_t busid, const struct usb_endpoint_descriptor *ep)
 
         fifo_size = musb_get_fifo_size(USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize), &used);
 
-        HWREGB(USB_BASE + MUSB_RXFIFOSZ_OFFSET) = fifo_size & 0x0f;
-        HWREGH(USB_BASE + MUSB_RXFIFOADD_OFFSET) = (g_musb_udc.fifo_size_offset >> 3);
+        /* FPVault: allocate once per endpoint, not once per open.
+         *
+         * This is a bump allocator with no free - usbd_ep_close below does
+         * nothing and the running offset only resets on bus reset. A UVC host
+         * selects alternate setting 1 to start a stream and 0 to stop it, and
+         * does that every single time a camera is opened or closed, so
+         * re-allocating on each open walked the offset off the end of the
+         * FIFO RAM after about a dozen cycles. The endpoint then got a bogus
+         * address and the stream broke until replug.
+         *
+         * The slice is remembered per endpoint and reused. memset on bus
+         * reset clears it, which is correct: the whole map is rebuilt then.
+         * Offsets start at USB_CTRL_EP_MPS, so 0 is a safe "unallocated". */
+        if (g_musb_udc.out_ep[ep_idx].fifo_addr == 0) {
+            g_musb_udc.out_ep[ep_idx].fifo_addr = g_musb_udc.fifo_size_offset;
+            g_musb_udc.fifo_size_offset += used;
+        }
 
-        g_musb_udc.fifo_size_offset += used;
+        HWREGB(USB_BASE + MUSB_RXFIFOSZ_OFFSET) = fifo_size & 0x0f;
+        HWREGH(USB_BASE + MUSB_RXFIFOADD_OFFSET) = (g_musb_udc.out_ep[ep_idx].fifo_addr >> 3);
     } else {
         g_musb_udc.in_ep[ep_idx].ep_mps = USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize);
         g_musb_udc.in_ep[ep_idx].ep_type = USB_GET_ENDPOINT_TYPE(ep->bmAttributes);
@@ -391,10 +410,15 @@ int usbd_ep_open(uint8_t busid, const struct usb_endpoint_descriptor *ep)
 
         fifo_size = musb_get_fifo_size(USB_GET_MAXPACKETSIZE(ep->wMaxPacketSize), &used);
 
-        HWREGB(USB_BASE + MUSB_TXFIFOSZ_OFFSET) = fifo_size & 0x0f;
-        HWREGH(USB_BASE + MUSB_TXFIFOADD_OFFSET) = (g_musb_udc.fifo_size_offset >> 3);
+        /* FPVault: allocate once per endpoint. See the matching note on the
+         * receive path above - alternate-setting changes made this leak. */
+        if (g_musb_udc.in_ep[ep_idx].fifo_addr == 0) {
+            g_musb_udc.in_ep[ep_idx].fifo_addr = g_musb_udc.fifo_size_offset;
+            g_musb_udc.fifo_size_offset += used;
+        }
 
-        g_musb_udc.fifo_size_offset += used;
+        HWREGB(USB_BASE + MUSB_TXFIFOSZ_OFFSET) = fifo_size & 0x0f;
+        HWREGH(USB_BASE + MUSB_TXFIFOADD_OFFSET) = (g_musb_udc.in_ep[ep_idx].fifo_addr >> 3);
     }
 
     musb_set_active_ep(old_ep_idx);

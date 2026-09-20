@@ -114,6 +114,10 @@ int main(void)
     eq("frame 2 width", uvc[133 + 5] | (uvc[133 + 6] << 8), 720);
     eq("frame 2 height", uvc[133 + 7] | (uvc[133 + 8] << 8), 576);
 
+    /* One alternate setting only: macOS selects interface 3 alt 0 and never
+     * an alt 1, so the endpoint has to be here. Observed on the wire. */
+    eq("VS bAlternateSetting", uvc[69 + 3], 0x00);
+
     /* The endpoint closes the block: bulk, IN, and full high-speed size. */
     eq("endpoint bLength", uvc[163], 7);
     eq("endpoint bDescriptorType", uvc[164], 0x05);

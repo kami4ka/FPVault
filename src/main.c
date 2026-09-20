@@ -23,6 +23,7 @@
 #include "pipeline.h"
 #include "fclink.h"
 #include "usbmsc.h"
+#include "usbuvc.h"
 #include "usbdfu.h"
 #include "arm32.h"
 #include "f1c100s_gpio.h"
@@ -155,6 +156,7 @@ int main(void) {
                 recorder_stats();
                 fclink_stats();
                 usbmsc_stats();
+            usbuvc_stats();
             }
         }
     }

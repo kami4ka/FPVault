@@ -15,11 +15,21 @@
  * unmodified, so the chain below is IT(1) -> PU(2) -> OT(3) even though this
  * device has no processing controls to offer.
  *
- * Bulk, not isochronous. UVC permits bulk for MJPEG and hosts accept it, and
- * it avoids alternate settings entirely - which matters because the MUSB
- * FIFO allocator never reclaims (usbd_ep_close is a no-op and the running
- * offset only resets on bus reset), so an isochronous design would leak FIFO
- * space on every stream start and stop.
+ * Bulk, not isochronous: one payload header per transfer rather than per
+ * packet, so a whole frame goes out in a single write with no per-packet
+ * work and no copy of the payload.
+ *
+ * The endpoint lives in alternate setting 0, and there is only one alternate
+ * setting. That is the bulk arrangement, and macOS insists on it: with the
+ * endpoint moved behind an alt 1, it selected interface 3 alt 0 and never
+ * alt 1, so nothing ever streamed. Observed directly on the wire.
+ *
+ * That rules out CherryUSB's own stream-start logic, which fires only on
+ * bAlternateSetting == 1. So this file answers the VideoStreaming interface's
+ * probe and commit requests itself and starts streaming on commit, which is
+ * the signal that actually means "begin" for a bulk device. The class keeps
+ * the VideoControl interface, where its unit and terminal handling is used
+ * as-is.
  */
 #pragma once
 
@@ -84,7 +94,7 @@
     /* Output terminal 3: the USB stream, fed by 2. */                         \
     0x09, 0x24, 0x03, 0x03, WBVAL(0x0101), 0x00, 0x02, 0x00,                   \
                                                                                \
-    /* --- VideoStreaming interface, one bulk IN, a single alt setting --- */  \
+    /* --- VideoStreaming: one alternate setting, carrying the bulk IN --- */ \
     0x09, 0x04, (vsIntf), 0x00, 0x01, 0x0E, 0x02, 0x00, 0x00,                  \
                                                                                \
     /* VS input header: one format, linked to output terminal 3 */             \
@@ -112,3 +122,19 @@
 /* True while a host has the stream open. The class drives this through its
  * usbd_video_open/close callbacks, which src/usbuvc.c implements. */
 int usbuvc_streaming(void);
+
+/* Register the bulk IN endpoint. Called from usbmsc_init, beside the other
+ * interfaces, before usbd_initialize. */
+void usbuvc_register(void);
+
+/* Replace the class's notify handler on both video interfaces, so every
+ * alternate-setting change is reported. Call after usbd_video_init_intf. */
+struct usbd_interface;
+void usbuvc_hook_notify(struct usbd_interface* vc, struct usbd_interface* vs);
+
+/* Hand one encoded frame to the host. Safe to call always: it returns
+ * immediately unless a host is watching. */
+void usbuvc_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality);
+
+/* 1 Hz line, silent unless streaming. */
+void usbuvc_stats(void);
