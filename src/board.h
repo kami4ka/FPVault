@@ -64,7 +64,22 @@
 #error "CAPTURE_BASE must come from the Makefile (-D and --defsym)"
 #endif
 
-#define TESTPAT_BASE   0x80800000u
+/* Bench buffers: encoder test patterns and the ISP format probe.
+ *
+ * These used to live at 0x8080_0000, which is NOT free - the link map puts
+ * an 8 MB .heap at 0x8002_32d8 and the 512 KB .stack right behind it at
+ * 0x8082_32d8, so 0x8080_0000 is inside the heap and a 720x480 luma plane
+ * (345,600 bytes) ran 201 KB into the und, abt and irq stacks. It survived
+ * only because exception stacks are idle and the irq stack's live depth is
+ * a few hundred bytes at the very top. A 1280x720 plane reaches the svc
+ * stack, which is the main loop's own, and resets the board on the spot -
+ * which is exactly how this was found.
+ *
+ * Here instead is the free window between the DFU staging buffer and the
+ * breadcrumbs, the same window board.h already documents as clear of
+ * everything above it and of U-Boot. */
+#define TESTPAT_BASE   0x83440000u
+#define TESTPAT_SIZE   (BREADCRUMB_BASE - TESTPAT_BASE)   /* 3.75 MB */
 
 /* Reset-cause breadcrumbs. DRAM retains content across a watchdog reset
  * (only real power removal clears it), so the exception handlers and the
