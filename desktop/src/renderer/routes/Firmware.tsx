@@ -81,6 +81,9 @@ export function Firmware({ device, s }: { device: DeviceState; s: Strings }) {
   const [canFlash, setCanFlash] = useState(false)
   const [busy, setBusy] = useState(false)
   const [showFel, setShowFel] = useState(false)
+  /* Which release has its notes open. Only the title was ever shown, so
+   * everything a release actually says about updating stayed on GitHub. */
+  const [openNotes, setOpenNotes] = useState<string | null>(null)
   const [canRecover, setCanRecover] = useState(false)
 
   const load = (force = false) => {
@@ -167,6 +170,37 @@ export function Firmware({ device, s }: { device: DeviceState; s: Strings }) {
               )}
             </div>
             <p className="mt-1 text-xs text-[var(--color-muted)]">{r.name}</p>
+
+            {/* A release that ships U-Boot cannot be delivered by the USB
+              * update at all: DFU writes the firmware slot and never touches
+              * offset 0. Saying so where the button is, rather than in the
+              * notes, is the only place it is certain to be read. */}
+            {r.hasUboot && !inFel && (
+              <p className="mt-2 rounded-[var(--radius-card)] border border-[var(--color-warn)] px-2.5 py-1.5 text-[11px] leading-relaxed text-[var(--color-warn)]">
+                {s.firmwareScreen.needsRecovery}
+              </p>
+            )}
+
+            {r.notes && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setOpenNotes((v) => (v === r.tag ? null : r.tag))}
+                  className="mt-2 rounded px-0 py-0.5 text-[11px] text-[var(--color-brand)] hover:underline"
+                >
+                  {openNotes === r.tag
+                    ? s.firmwareScreen.hideNotes
+                    : s.firmwareScreen.showNotes}
+                </button>
+                {openNotes === r.tag && (
+                  <div className="mt-1.5 max-h-72 overflow-y-auto rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-canvas)] px-3 py-2">
+                    <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--color-muted)]">
+                      {r.notes}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
           </article>
         ))}
 

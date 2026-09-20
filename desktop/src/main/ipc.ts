@@ -311,7 +311,8 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
       prerelease: r.prerelease,
       publishedAt: r.publishedAt,
       notes: r.notes,
-      hasFirmware: r.assets.some((a) => a.name === 'fpvault.bin')
+      hasFirmware: r.assets.some((a) => a.name === 'fpvault.bin'),
+      hasUboot: r.assets.some((a) => a.name === 'u-boot-sunxi-with-spl.bin')
     }))
   })
   ipcMain.handle('firmware:canFlash', () => dfuAvailable())

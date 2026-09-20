@@ -95,6 +95,10 @@ export const en = {
     prerelease: 'pre-release',
     none: 'No firmware releases found',
     installed: 'Installed',
+    showNotes: 'Release notes',
+    hideNotes: 'Hide notes',
+    needsRecovery:
+      'This release also updates U-Boot. Installing over USB replaces the firmware only and leaves U-Boot untouched, so use recovery to get both.',
     install: (tag: string) => `Install ${tag}`,
     cannotFlash: 'Connect the board in card-reader mode to install firmware',
     whyUnknown:

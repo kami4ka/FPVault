@@ -204,6 +204,15 @@ export interface ReleaseInfo {
   publishedAt: string
   notes: string
   hasFirmware: boolean
+  /**
+   * The release ships a U-Boot image as well as firmware.
+   *
+   * This decides whether the USB update can deliver the release at all. DFU
+   * writes the firmware slot at SPINOR_FW_OFF and never touches offset 0, so
+   * a release that changes U-Boot needs recovery. Derived from the assets
+   * rather than hardcoded, so it stays true for later releases.
+   */
+  hasUboot: boolean
 }
 
 /* ---- preferences --------------------------------------------------------
