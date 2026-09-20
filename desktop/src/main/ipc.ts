@@ -303,6 +303,14 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
   })
 
   /* ---- firmware ---- */
+  /**
+   * Release notes may carry `FPVault-Requires-Recovery: yes` as a trailer,
+   * declaring that the release changes something DFU cannot write. Read it
+   * out and drop the line, so it steers the UI without being prose the
+   * reader has to skip past.
+   */
+  const RECOVERY_TRAILER = /^[ \t]*FPVault-Requires-Recovery:[ \t]*(yes|true)[ \t]*$/im
+
   ipcMain.handle('firmware:releases', async (_e, force?: boolean) => {
     const releases = await listReleases(force ?? false)
     return releases.map((r) => ({
@@ -310,9 +318,10 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
       name: r.name,
       prerelease: r.prerelease,
       publishedAt: r.publishedAt,
-      notes: r.notes,
+      notes: r.notes.replace(/^[ \t]*FPVault-[A-Za-z-]+:[^\n]*\n?/gim, '').trimEnd(),
       hasFirmware: r.assets.some((a) => a.name === 'fpvault.bin'),
-      hasUboot: r.assets.some((a) => a.name === 'u-boot-sunxi-with-spl.bin')
+      hasUboot: r.assets.some((a) => a.name === 'u-boot-sunxi-with-spl.bin'),
+      requiresRecovery: RECOVERY_TRAILER.test(r.notes)
     }))
   })
   ipcMain.handle('firmware:canFlash', () => dfuAvailable())

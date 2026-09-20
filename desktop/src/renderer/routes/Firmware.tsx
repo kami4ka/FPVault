@@ -151,7 +151,7 @@ export function Firmware({ device, s }: { device: DeviceState; s: Strings }) {
               {inFel ? (
                 <button
                   type="button"
-                  disabled={!canRecover || !r.hasFirmware}
+                  disabled={!canRecover || !r.hasFirmware || !r.hasUboot}
                   onClick={() => void window.fpvault.firmware.recover(r.tag, true)}
                   className="rounded-[var(--radius-card)] bg-[var(--color-busy)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-35"
                 >
@@ -171,11 +171,11 @@ export function Firmware({ device, s }: { device: DeviceState; s: Strings }) {
             </div>
             <p className="mt-1 text-xs text-[var(--color-muted)]">{r.name}</p>
 
-            {/* A release that ships U-Boot cannot be delivered by the USB
-              * update at all: DFU writes the firmware slot and never touches
-              * offset 0. Saying so where the button is, rather than in the
-              * notes, is the only place it is certain to be read. */}
-            {r.hasUboot && !inFel && (
+            {/* Declared by the release, not guessed from its assets: every
+              * release ships a U-Boot image whether or not it changed one.
+              * Shown only where Install is the offered action, since in
+              * recovery the button already writes both halves. */}
+            {r.requiresRecovery && !inFel && (
               <p className="mt-2 rounded-[var(--radius-card)] border border-[var(--color-warn)] px-2.5 py-1.5 text-[11px] leading-relaxed text-[var(--color-warn)]">
                 {s.firmwareScreen.needsRecovery}
               </p>

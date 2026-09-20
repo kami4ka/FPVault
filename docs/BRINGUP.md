@@ -130,6 +130,34 @@ generates Python 2 calls that no longer compile, so it needs SWIG 4.4 or
 earlier, and the extension must link with `-undefined dynamic_lookup`,
 which is what the `HOSTLDFLAGS` above is really for.
 
+## Cutting a release
+
+```sh
+tools/release.sh v0.9.5 notes.md ../u-boot/u-boot-sunxi-with-spl.bin \
+    [--requires-recovery]
+```
+
+It checks the tag against `FW_VERSION_STR` in `src/board.h`, builds the
+firmware, applies the same two checks the board makes before it burns
+anything (size within the 256 KB slot, byte 3 is the `0xEA` branch), checks
+the U-Boot image really carries an `eGON.BT0` header, and attaches both.
+
+**`--requires-recovery` matters.** It appends a trailer to the notes:
+
+```
+FPVault-Requires-Recovery: yes
+```
+
+FPVault Desktop parses that, strips it from the notes it shows, and warns
+beside the Install button that the release has to go on over recovery.
+Pass it whenever the release changes anything outside the firmware slot at
+0x100000 — U-Boot at offset 0 above all — because the USB update writes
+that slot and nothing else.
+
+It cannot be inferred from the assets. Every release ships a U-Boot image
+whether or not that image changed, and two builds of identical source differ
+anyway because U-Boot stamps its build date in. So the release declares it.
+
 ## M1 — VE first light (go/no-go)
 
 The one genuinely open silicon question: does the Cedar VE's JPEG encoder

@@ -204,15 +204,24 @@ export interface ReleaseInfo {
   publishedAt: string
   notes: string
   hasFirmware: boolean
-  /**
-   * The release ships a U-Boot image as well as firmware.
-   *
-   * This decides whether the USB update can deliver the release at all. DFU
-   * writes the firmware slot at SPINOR_FW_OFF and never touches offset 0, so
-   * a release that changes U-Boot needs recovery. Derived from the assets
-   * rather than hardcoded, so it stays true for later releases.
-   */
+  /** The release ships a U-Boot image, so recovery can write both halves. */
   hasUboot: boolean
+  /**
+   * The release changes something the USB update cannot write, so it has to
+   * go on over recovery.
+   *
+   * DFU writes the firmware slot at SPINOR_FW_OFF and never touches offset 0,
+   * so a release that changes U-Boot cannot be delivered by Install. This
+   * cannot be inferred from the assets: every release ships a U-Boot image
+   * whether or not that image changed, and two builds of identical source
+   * differ anyway because U-Boot stamps its build date in. So the release
+   * declares it, with a trailer in its notes:
+   *
+   *     FPVault-Requires-Recovery: yes
+   *
+   * Parsed out and stripped before the notes are shown. See tools/release.sh.
+   */
+  requiresRecovery: boolean
 }
 
 /* ---- preferences --------------------------------------------------------
