@@ -23,7 +23,7 @@ SRCS += src/main.c src/system.c src/exception.c src/console.c src/capture.c \
         src/avi.c src/dcf.c src/runcam.c \
         src/sdc.c src/sdcard.c src/diskio.c src/sdtest.c src/recorder.c \
         src/pipeline.c src/fclink.c src/usbmsc.c src/usbphy.c \
-        src/usbdfu.c src/spinor.c \
+        src/usbdfu.c src/usbuvc.c src/spinor.c \
         vendor/cherryusb/core/usbd_core.c \
         vendor/cherryusb/class/msc/usbd_msc.c \
         vendor/cherryusb/class/video/usbd_video.c \

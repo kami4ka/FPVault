@@ -25,3 +25,6 @@ clean:
 	rm -f $(TESTS) *.avi
 
 .PHONY: all clean
+
+test_uvcdesc: test_uvcdesc.c ../../src/usbuvc.h
+	$(CC) $(CFLAGS) -o $@ test_uvcdesc.c

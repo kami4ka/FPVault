@@ -16,6 +16,8 @@
 #include "board.h"
 #include "usbmsc.h"
 #include "usbdfu.h"
+#include "usbuvc.h"
+#include "usbd_video.h"
 #include "spinor.h"
 #include "usbphy.h"
 #include "usbd_core.h"
@@ -38,12 +40,12 @@
 #define USBD_PID 0xF1C2
 #define USBD_MAX_POWER 250 /* mA */
 #define USBD_LANGID_STRING 1033
-#define USB_CONFIG_SIZE (9 + MSC_DESCRIPTOR_LEN + DFU_DESCRIPTOR_LEN)
+#define USB_CONFIG_SIZE (9 + MSC_DESCRIPTOR_LEN + DFU_DESCRIPTOR_LEN + UVC_DESCRIPTOR_LEN)
 
 extern sdcard_t* disk_card(void);
 extern void USBD_IRQHandler(uint8_t busid);
 
-static struct usbd_interface intf0, intf1;
+static struct usbd_interface intf0, intf1, intf2, intf3;
 static volatile uint8_t host_present = 0;
 static volatile uint8_t card_ready = 0;
 static volatile uint32_t rd_sectors = 0, wr_sectors = 0;
@@ -74,11 +76,19 @@ static const uint8_t msc_descriptor[] = {
      * host that reads that value should report the version as unknown
      * rather than as 1.0.0; the presence of the DFU interface below tells
      * the two apart if it ever matters. */
-    USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0x00, 0x00, 0x00, USBD_VID, USBD_PID,
+    /* 0xEF/0x02/0x01 is Miscellaneous / Common Class / Interface
+     * Association. A device carrying an IAD must say so here, or hosts are
+     * entitled to ignore the association and treat the two video interfaces
+     * as unrelated functions. This replaced 0x00/0x00/0x00, which is why the
+     * card reader and DFU had to be re-verified when video landed. */
+    USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xEF, 0x02, 0x01, USBD_VID, USBD_PID,
                                FW_VERSION_BCD, 0x01),
-    USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
+    USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x04, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     MSC_DESCRIPTOR_INIT(0x00, MSC_OUT_EP, MSC_IN_EP, MSC_MAX_MPS, 0x02),
     DFU_DESCRIPTOR_INIT(0x01, 0x04),
+    /* Video last, so mass storage stays interface 0 and DFU stays 1. The
+     * desktop app's Windows probe finds DFU by its interface index. */
+    UVC_DESCRIPTOR_INIT(0x02, 0x03, 0x05),
     /* string0: language */
     USB_LANGID_INIT(USBD_LANGID_STRING),
     /* string1: manufacturer "FPVault" */
@@ -94,6 +104,10 @@ static const uint8_t msc_descriptor[] = {
     0x22, USB_DESCRIPTOR_TYPE_STRING,
     'F',0, 'P',0, 'V',0, 'a',0, 'u',0, 'l',0, 't',0, ' ',0,
     'f',0, 'i',0, 'r',0, 'm',0, 'w',0, 'a',0, 'r',0, 'e',0,
+    /* string5: video function "FPVault Camera" */
+    0x1E, USB_DESCRIPTOR_TYPE_STRING,
+    'F',0, 'P',0, 'V',0, 'a',0, 'u',0, 'l',0, 't',0, ' ',0,
+    'C',0, 'a',0, 'm',0, 'e',0, 'r',0, 'a',0,
     0x00
 };
 /* clang-format on */
@@ -157,9 +171,16 @@ void usbmsc_init(void) {
     usbd_desc_register(0, msc_descriptor);
     usbd_add_interface(0, usbd_msc_init_intf(0, &intf0, MSC_OUT_EP, MSC_IN_EP));
     usbd_add_interface(0, usbdfu_init_intf(&intf1));
+    /* Both video interfaces take the same handler: probe and commit arrive
+     * addressed to VideoStreaming, unit and terminal requests to
+     * VideoControl, and the class sorts them out by request. */
+    usbd_add_interface(0, usbd_video_init_intf(0, &intf2, UVC_INTERVAL_NTSC,
+                                              UVC_MAX_FRAME_SIZE, UVC_MAX_MPS));
+    usbd_add_interface(0, usbd_video_init_intf(0, &intf3, UVC_INTERVAL_NTSC,
+                                              UVC_MAX_FRAME_SIZE, UVC_MAX_MPS));
     spinor_init();
     usbd_initialize(0, USBD_BASE, usbd_event_handler);
-    printf("[usb] device mode up (MSC, %s)\r\n",
+    printf("[usb] device mode up (MSC + DFU + UVC, %s)\r\n",
            MSC_MAX_MPS == 512 ? "HS" : "FS");
 }
 
