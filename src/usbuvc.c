@@ -31,6 +31,9 @@
 #include "f1c100s_timer.h"
 #include "capture.h"
 
+/* Added to the MUSB port: discard a queued, uncollected transfer. */
+extern void usbd_ep_flush(uint8_t busid, const uint8_t ep);
+
 /* The payload header has to abut the JPEG, so it lives in the slot's own
  * slack immediately before it. The recorder's AVI chunk header wants the
  * same bytes for the same reason, and they overlap - which is safe only
@@ -49,6 +52,8 @@
 static volatile uint8_t streaming = 0;
 static volatile uint8_t busy = 0;
 static uint8_t fid = 0;
+/* Set when a session begins; acted on by the pump, never in the IRQ. */
+static volatile uint8_t need_flush = 0;
 
 static uint32_t frames_sent = 0, frames_dropped = 0, bytes_sent = 0;
 static uint32_t last_sent = 0;
@@ -270,6 +275,13 @@ void usbuvc_hook_notify(struct usbd_interface* vc, struct usbd_interface* vs) {
 void usbd_video_open(uint8_t busid, uint8_t intf) {
     (void)busid;
     (void)intf;
+    /* Runs in the USB interrupt, inside the commit control transfer, so it
+     * touches no endpoint registers: doing that here moves the controller's
+     * indexed-register window out from under the endpoint-0 state machine
+     * and the device stops answering control transfers entirely. The host
+     * then drops it off the bus, which is exactly what happened. The pump
+     * does the flush instead, in the main loop. */
+    need_flush = 1;
     busy = 0;
     fid = 0;
     streaming = 1;
@@ -298,10 +310,25 @@ void usbuvc_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) {
     uint32_t jpeg_len, total;
 
     if(!streaming) return;
+
+    /* Start each session from a known-empty endpoint. A frame left queued by
+     * a host that closed without warning would otherwise be collected first
+     * by the next one, pushing every payload header after it out of place
+     * for good: the stream opens black and stays black until replug. */
+    if(need_flush) {
+        need_flush = 0;
+        usbd_ep_flush(0, UVC_IN_EP);
+        busy = 0;
+    }
+
     if(busy) {
         if((uint32_t)(busy_at - tim_get_cnt(TIM0)) > UVC_STALL_TICKS) {
             printf("[uvc] host stopped reading, stream idle after %lu frames\r\n",
                    (unsigned long)frames_sent);
+            /* The abandoned frame must not be left for the next host to
+             * collect: it would arrive before that session's first frame and
+             * push every payload header out of place for good. */
+            usbd_ep_flush(0, UVC_IN_EP);
             streaming = 0;
             busy = 0;
         }

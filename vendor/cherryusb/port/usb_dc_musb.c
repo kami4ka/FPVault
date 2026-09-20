@@ -620,6 +620,47 @@ int usbd_write_packet(uint8_t ep_addr, uint8_t *buffer, uint16_t len)
     return cnt;
 }
 
+/*
+ * FPVault: throw away a transfer that was queued and never collected.
+ *
+ * Needed because a bulk video stream has no stop signal. When a host closes
+ * the camera it simply stops reading, leaving a frame sitting in the
+ * endpoint FIFO. If the next host is allowed to collect that stale frame,
+ * every frame after it is offset by its length, the payload headers no
+ * longer land where the host looks for them, and the stream never recovers:
+ * it opens black and stays black until the device is replugged. Seen
+ * exactly that way - the first session worked, every reopen was black.
+ *
+ * Clears the hardware FIFO, the driver's idea of the transfer, and the
+ * completion interrupt, so nothing from the abandoned frame can arrive
+ * late and be mistaken for the new one.
+ */
+void usbd_ep_flush(uint8_t busid, const uint8_t ep)
+{
+    uint8_t ep_idx = USB_EP_GET_IDX(ep);
+    uint8_t old_ep_idx;
+
+    (void)busid;
+    if (ep_idx >= CONFIG_USBDEV_EP_NUM) {
+        return;
+    }
+
+    old_ep_idx = musb_get_active_ep();
+    musb_set_active_ep(ep_idx);
+
+    if (USB_EP_DIR_IS_IN(ep)) {
+        HWREGH(USB_BASE + MUSB_TXIE_OFFSET) &= ~(1 << ep_idx);
+        if (HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) & USB_TXCSRL1_TXRDY) {
+            HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = USB_TXCSRL1_FLUSH;
+        }
+        g_musb_udc.in_ep[ep_idx].xfer_buf = NULL;
+        g_musb_udc.in_ep[ep_idx].xfer_len = 0;
+        g_musb_udc.in_ep[ep_idx].actual_xfer_len = 0;
+    }
+
+    musb_set_active_ep(old_ep_idx);
+}
+
 int usbd_ep_start_write(uint8_t busid, const uint8_t ep, const uint8_t *data, uint32_t data_len)
 {
     uint8_t ep_idx = USB_EP_GET_IDX(ep);
