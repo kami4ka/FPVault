@@ -66,6 +66,12 @@ Early bring-up. Milestones:
       timestamps, joins or exports a session, plays them frame-accurately,
       and updates firmware over USB with animated help for the parts that
       need hands on the board
+- [x] M11 — **USB camera**: plugged into a computer the board is a webcam as
+      well as a card reader, streaming the same hardware-encoded MJPEG the
+      recorder writes. Measured 30 fps, 0 drops, ~690 KB/s, with the card
+      mounted and readable at full speed throughout. Nothing to switch on:
+      UVC streaming is host-initiated, so it starts when an application
+      opens the camera
 
 Power the board with a card inserted and it records — no host, no
 commands.
