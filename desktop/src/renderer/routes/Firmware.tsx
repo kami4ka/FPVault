@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react'
 import type { DeviceState, ReleaseInfo } from '@shared/types'
 import { BoardGuide } from '../guidance/BoardGuide.js'
+import { Notes } from '../components/Notes.js'
 import type { Strings } from '../i18n/index.js'
 
 function Capability({ device, s }: { device: DeviceState; s: Strings }) {
@@ -193,10 +194,8 @@ export function Firmware({ device, s }: { device: DeviceState; s: Strings }) {
                     : s.firmwareScreen.showNotes}
                 </button>
                 {openNotes === r.tag && (
-                  <div className="mt-1.5 max-h-72 overflow-y-auto rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-canvas)] px-3 py-2">
-                    <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--color-muted)]">
-                      {r.notes}
-                    </p>
+                  <div className="mt-1.5 max-h-80 overflow-y-auto rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-canvas)] px-3 py-2.5">
+                    <Notes markdown={r.notes} />
                   </div>
                 )}
               </>

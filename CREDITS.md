@@ -62,6 +62,11 @@ them at build time against the sha256 digests pinned in
   (MIT), **[Vite](https://vite.dev/)** (MIT),
   **[Tailwind CSS](https://tailwindcss.com/)** (MIT) — application runtime
   and build tooling.
+- **[react-markdown](https://github.com/remarkjs/react-markdown)** (MIT) and
+  **[remark-gfm](https://github.com/remarkjs/remark-gfm)** (MIT) — render
+  GitHub release notes in the Firmware screen. Raw HTML is left unrendered,
+  which is react-markdown's default and the reason it is used rather than a
+  parser plus a sanitiser.
 
 The AVI reader in `desktop/src/shared/avi/` is a TypeScript port of this
 repository's own `tools/checkavi.py`, and the test suite asserts the two keep

@@ -1,7 +1,7 @@
 {
   "name": "fpvault-desktop",
   "version": "0.1.0",
-  "description": "FPVault Desktop \u2014 companion app for the FPVault FPV DVR board",
+  "description": "FPVault Desktop — companion app for the FPVault FPV DVR board",
   "license": "GPL-3.0-or-later",
   "author": "Oleg Kulyk",
   "homepage": "https://github.com/kami4ka/FPVault",
@@ -29,6 +29,8 @@
     "electron-vite": "^5.0.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.0",
     "vite": "^7.0.0",

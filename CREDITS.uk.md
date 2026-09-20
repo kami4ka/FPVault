@@ -63,6 +63,11 @@
   (MIT), **[Vite](https://vite.dev/)** (MIT),
   **[Tailwind CSS](https://tailwindcss.com/)** (MIT) — середовище виконання
   та інструменти збірки.
+- **[react-markdown](https://github.com/remarkjs/react-markdown)** (MIT) та
+  **[remark-gfm](https://github.com/remarkjs/remark-gfm)** (MIT) — показують
+  нотатки релізів GitHub на екрані прошивки. Сирий HTML не відтворюється —
+  це типова поведінка react-markdown і причина, чому взято саме його, а не
+  парсер плюс санітайзер.
 
 Читач AVI у `desktop/src/shared/avi/` — це порт на TypeScript власного
 `tools/checkavi.py` із цього ж репозиторію, і набір тестів стежить, щоб обидві
