@@ -107,25 +107,25 @@ int main(void)
     walk("VS class-specific block walks", 78, vs_cs);
 
     /* Format announces two frames, and two must follow. */
-    eq("MJPEG bNumFrameDescriptors", uvc[92 + 4], 2);
+    eq("MJPEG bNumFrameDescriptors", uvc[92 + 4], 1);
     eq("frame 1 index", uvc[103 + 3], 1);
     eq("frame 1 width", uvc[103 + 5] | (uvc[103 + 6] << 8), 720);
     eq("frame 1 height", uvc[103 + 7] | (uvc[103 + 8] << 8), 480);
-    eq("frame 2 index", uvc[133 + 3], 2);
-    eq("frame 2 width", uvc[133 + 5] | (uvc[133 + 6] << 8), 720);
-    eq("frame 2 height", uvc[133 + 7] | (uvc[133 + 8] << 8), 576);
+    /* Exactly one frame is offered, and its geometry is written at start-up
+     * from the live signal. Offering a second one a host could choose but
+     * the board cannot produce is what made QuickTime render black. */
 
     /* One alternate setting only: macOS selects interface 3 alt 0 and never
      * an alt 1, so the endpoint has to be here. Observed on the wire. */
     eq("VS bAlternateSetting", uvc[69 + 3], 0x00);
 
     /* The endpoint closes the block: bulk, IN, and full high-speed size. */
-    eq("endpoint bLength", uvc[163], 7);
-    eq("endpoint bDescriptorType", uvc[164], 0x05);
-    eq("endpoint bEndpointAddress", uvc[165], UVC_IN_EP);
-    eq("endpoint bmAttributes is bulk", uvc[166], 0x02);
-    eq("endpoint wMaxPacketSize", uvc[167] | (uvc[168] << 8), UVC_MAX_MPS);
-    eq("endpoint bInterval is 0 for bulk", uvc[169], 0);
+    eq("endpoint bLength", uvc[133], 7);
+    eq("endpoint bDescriptorType", uvc[134], 0x05);
+    eq("endpoint bEndpointAddress", uvc[135], UVC_IN_EP);
+    eq("endpoint bmAttributes is bulk", uvc[136], 0x02);
+    eq("endpoint wMaxPacketSize", uvc[137] | (uvc[138] << 8), UVC_MAX_MPS);
+    eq("endpoint bInterval is 0 for bulk", uvc[139], 0);
 
     /* And the whole block chains cleanly from end to end. */
     walk("whole UVC block walks", 0, sizeof(uvc));

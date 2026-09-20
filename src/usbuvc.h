@@ -63,14 +63,14 @@
 #define UVC_MAX_BITRATE 30000000u
 
 /* 8 IAD + 9 VC + 13 VC header + 18 input + 12 processing + 9 output
- * + 9 VS + 14 VS header + 11 format + 30 + 30 frames + 7 endpoint */
-#define UVC_DESCRIPTOR_LEN (8 + 9 + 13 + 18 + 12 + 9 + 9 + 14 + 11 + 30 + 30 + 7)
+ * + 9 VS + 14 VS header + 11 format + 30 frame + 7 endpoint */
+#define UVC_DESCRIPTOR_LEN (8 + 9 + 13 + 18 + 12 + 9 + 9 + 14 + 11 + 30 + 7)
 
 /* Class-specific VC block length, which the VC header must declare:
  * itself + input terminal + processing unit + output terminal. */
 #define UVC_VC_TOTAL (13 + 18 + 12 + 9)
 /* Class-specific VS block: input header + format + both frames. */
-#define UVC_VS_TOTAL (14 + 11 + 30 + 30)
+#define UVC_VS_TOTAL (14 + 11 + 30)
 
 #define UVC_DESCRIPTOR_INIT(vcIntf, vsIntf, strIdx)                            \
     /* Interface Association: interfaces vcIntf and vsIntf are one function */ \
@@ -103,23 +103,26 @@
     0x0E, 0x24, 0x01, 0x01, WBVAL(UVC_VS_TOTAL), UVC_IN_EP,                    \
     0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00,                                  \
                                                                                \
-    /* MJPEG format 1, two frame descriptors, NTSC is the default */           \
-    0x0B, 0x24, 0x06, 0x01, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,          \
+    /* MJPEG, exactly one frame descriptor */                                  \
+    0x0B, 0x24, 0x06, 0x01, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,          \
                                                                                \
-    /* Frame 1: 720x480 at 29.97, one discrete interval */                     \
+    /* The one frame. Geometry and interval are written at start-up from the  \
+     * signal actually present - see usbuvc_apply_standard(). NTSC here is    \
+     * only what sits in flash before that runs. */                           \
     0x1E, 0x24, 0x07, 0x01, 0x00, WBVAL(720), WBVAL(480),                      \
     DBVAL(UVC_MIN_BITRATE), DBVAL(UVC_MAX_BITRATE),                            \
     DBVAL(UVC_MAX_FRAME_SIZE), DBVAL(UVC_INTERVAL_NTSC), 0x01,                 \
     DBVAL(UVC_INTERVAL_NTSC),                                                  \
                                                                                \
-    /* Frame 2: 720x576 at 25, for a PAL source */                             \
-    0x1E, 0x24, 0x07, 0x02, 0x00, WBVAL(720), WBVAL(576),                      \
-    DBVAL(UVC_MIN_BITRATE), DBVAL(UVC_MAX_BITRATE),                            \
-    DBVAL(UVC_MAX_FRAME_SIZE), DBVAL(UVC_INTERVAL_PAL), 0x01,                  \
-    DBVAL(UVC_INTERVAL_PAL),                                                   \
-                                                                               \
     /* Bulk IN. bInterval is meaningless for bulk and must be 0. */            \
     0x07, 0x05, UVC_IN_EP, 0x02, WBVAL(UVC_MAX_MPS), 0x00
+
+/* Write the live signal's geometry into the frame descriptor, before the
+ * descriptors are registered. Advertising a frame the board cannot produce
+ * invites a host to lay out for it: QuickTime always asks for the largest
+ * one offered, so a 720x576 entry got it expecting 576 lines of a 480-line
+ * picture. */
+void usbuvc_apply_standard(uint8_t* desc, uint32_t len);
 
 /* True while a host has the stream open. The class drives this through its
  * usbd_video_open/close callbacks, which src/usbuvc.c implements. */

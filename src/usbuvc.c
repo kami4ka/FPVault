@@ -153,7 +153,7 @@ static void probe_defaults(void) {
     for(unsigned i = 0; i < UVC_PROBE_LEN; i++) probe_ctrl[i] = 0;
     probe_ctrl[0] = 0x01; /* bmHint: hold dwFrameInterval */
     probe_ctrl[2] = 0x01; /* bFormatIndex: the only format, MJPEG */
-    probe_ctrl[3] = pal ? 0x02 : 0x01; /* bFrameIndex follows the signal */
+    probe_ctrl[3] = 0x01; /* the only frame; its geometry follows the signal */
     probe_ctrl[4] = (uint8_t)(interval);
     probe_ctrl[5] = (uint8_t)(interval >> 8);
     probe_ctrl[6] = (uint8_t)(interval >> 16);
@@ -187,7 +187,10 @@ static int uvc_vs_request(uint8_t busid, struct usb_setup_packet* setup,
     static uint8_t scratch[2];
 
     (void)busid;
-    if(cs != UVC_VS_PROBE_CONTROL && cs != UVC_VS_COMMIT_CONTROL) return -1;
+    if(cs != UVC_VS_PROBE_CONTROL && cs != UVC_VS_COMMIT_CONTROL) {
+        printf("[uvc] unknown control selector %02x, stalling\r\n", (unsigned)cs);
+        return -1;
+    }
 
     switch(setup->bRequest) {
     case UVC_GET_CUR:
@@ -218,10 +221,18 @@ static int uvc_vs_request(uint8_t busid, struct usb_setup_packet* setup,
          * board will really send, which probe_defaults() takes from the live
          * signal. A host that asks for the PAL frame while the input is NTSC
          * would otherwise expect 576 lines and be handed 480. */
-        if(*len >= 4) {
-            printf("[uvc] host asked for format %u frame %u, %s\r\n",
-                   (unsigned)(*data)[2], (unsigned)(*data)[3],
-                   cs == UVC_VS_COMMIT_CONTROL ? "commit" : "probe");
+        if(*len >= 26) {
+            const uint8_t* q = *data;
+            uint32_t iv = (uint32_t)q[4] | ((uint32_t)q[5] << 8) |
+                          ((uint32_t)q[6] << 16) | ((uint32_t)q[7] << 24);
+            uint32_t fs = (uint32_t)q[18] | ((uint32_t)q[19] << 8) |
+                          ((uint32_t)q[20] << 16) | ((uint32_t)q[21] << 24);
+            uint32_t pl = (uint32_t)q[22] | ((uint32_t)q[23] << 8) |
+                          ((uint32_t)q[24] << 16) | ((uint32_t)q[25] << 24);
+            printf("[uvc] %s: fmt %u frame %u interval %lu frame_sz %lu payload %lu\r\n",
+                   cs == UVC_VS_COMMIT_CONTROL ? "commit" : "probe",
+                   (unsigned)q[2], (unsigned)q[3], (unsigned long)iv,
+                   (unsigned long)fs, (unsigned long)pl);
         }
         probe_defaults();
         if(cs == UVC_VS_COMMIT_CONTROL) {
@@ -256,6 +267,51 @@ static void uvc_notify(uint8_t busid, uint8_t event, void* arg) {
         streaming = 0;
         busy = 0;
         probe_defaults();
+    }
+}
+
+/*
+ * Write the live signal's geometry into the frame descriptor.
+ *
+ * Found the hard way. Two frames were advertised, NTSC and PAL, because the
+ * input can be either. But the board can only ever send the one it is
+ * actually receiving, and a host is entitled to pick any frame offered:
+ * QuickTime always asked for the largest, 720x576, then laid out for 576
+ * lines and was handed 480. It received every frame at full rate and showed
+ * black. ffmpeg only escaped this because it was told -video_size 720x480.
+ *
+ * So exactly one frame is offered and it is the true one. The descriptor is
+ * patched in place rather than built per standard, which keeps every length
+ * in it constant - and those lengths are checked against the bytes by
+ * tests/host/test_uvcdesc.c.
+ *
+ * The signal can still change later; capture_follow_input() switches at
+ * runtime. That would need a replug to re-advertise, which is worth a note
+ * rather than machinery, since the board's mode already works that way.
+ */
+void usbuvc_apply_standard(uint8_t* desc, uint32_t len) {
+    int pal = (capture_standard() == VID_PAL);
+    uint16_t h = pal ? 576 : 480;
+    uint32_t iv = pal ? UVC_INTERVAL_PAL : UVC_INTERVAL_NTSC;
+    uint32_t i;
+
+    for(i = 0; i + 1 < len; i++) {
+        /* CS_INTERFACE, VS_FRAME_MJPEG */
+        if(desc[i] == 0x1E && desc[i + 1] == 0x24 && desc[i + 2] == 0x07) {
+            desc[i + 7] = (uint8_t)(h);
+            desc[i + 8] = (uint8_t)(h >> 8);
+            desc[i + 21] = (uint8_t)(iv);
+            desc[i + 22] = (uint8_t)(iv >> 8);
+            desc[i + 23] = (uint8_t)(iv >> 16);
+            desc[i + 24] = (uint8_t)(iv >> 24);
+            desc[i + 26] = (uint8_t)(iv);
+            desc[i + 27] = (uint8_t)(iv >> 8);
+            desc[i + 28] = (uint8_t)(iv >> 16);
+            desc[i + 29] = (uint8_t)(iv >> 24);
+            printf("[uvc] advertising 720x%u at %s\r\n", (unsigned)h,
+                   pal ? "25" : "29.97");
+            return;
+        }
     }
 }
 

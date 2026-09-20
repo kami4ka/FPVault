@@ -68,7 +68,9 @@ void usb_dc_low_level_init(void) {
 }
 
 /* clang-format off */
-static const uint8_t msc_descriptor[] = {
+/* Not const: usbuvc_apply_standard() writes the live video geometry into
+ * the frame descriptor before this is registered. */
+static uint8_t msc_descriptor[] = {
     /* bcdDevice carries the firmware version (board.h FW_VERSION_BCD).
      * It is the only way a host can tell which firmware a board runs - the
      * boot banner goes to UART0, DFU refuses uploads, and the card holds
@@ -168,6 +170,7 @@ void usbmsc_init(void) {
     if(disk_raw_init() != 0)
         printf("[usb] no card at init - exporting 0 blocks\r\n");
 
+    usbuvc_apply_standard(msc_descriptor, sizeof(msc_descriptor));
     usbd_desc_register(0, msc_descriptor);
     usbd_add_interface(0, usbd_msc_init_intf(0, &intf0, MSC_OUT_EP, MSC_IN_EP));
     usbd_add_interface(0, usbdfu_init_intf(&intf1));
