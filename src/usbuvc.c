@@ -49,6 +49,11 @@ extern void usbd_ep_flush(uint8_t busid, const uint8_t ep);
 #define UVC_BM_EOF 0x02u
 #define UVC_BM_FID 0x01u
 
+/* The VideoStreaming interface number, learned at registration. Only that
+ * interface's SET_INTERFACE means anything for the stream; the
+ * VideoControl one shares this handler. */
+static uint8_t vs_intf_num = 0xff;
+
 static volatile uint8_t streaming = 0;
 static volatile uint8_t busy = 0;
 static uint8_t fid = 0;
@@ -59,6 +64,10 @@ static uint32_t frames_sent = 0, frames_dropped = 0, bytes_sent = 0;
 static uint32_t last_sent = 0;
 /* TIM0 when the in-flight transfer was queued. TIM0 counts down. */
 static uint32_t busy_at = 0;
+/* Stall bookkeeping: frames_sent as of the last stall, and how many stalls
+ * in a row have passed without it moving. */
+static uint32_t stall_mark = 0;
+static uint8_t stall_strikes = 0;
 
 /*
  * How long to wait for a transfer before deciding the host has gone.
@@ -72,6 +81,10 @@ static uint32_t busy_at = 0;
  * person notices.
  */
 #define UVC_STALL_TICKS TICKS_PER_SEC
+/* Consecutive stalls with no frame collected in between before the stream
+ * is declared dead. Three seconds is far longer than any re-open takes and
+ * still well inside a person's patience. */
+#define UVC_STALL_STRIKES 3
 
 int usbuvc_streaming(void) {
     return streaming;
@@ -263,6 +276,38 @@ static void uvc_notify(uint8_t busid, uint8_t event, void* arg) {
         intf = (struct usb_interface_descriptor*)arg;
         printf("[uvc] host selected interface %u alt %u\r\n",
                (unsigned)intf->bInterfaceNumber, (unsigned)intf->bAlternateSetting);
+        /*
+         * Selecting the streaming interface starts a session, and it is not
+         * always preceded by a commit.
+         *
+         * A host that opens the camera a second time re-selects this
+         * interface and clears the endpoint halt rather than negotiating
+         * again. Clearing the halt resets the endpoint's data toggle
+         * (usbd_ep_clear_stall in the MUSB port) but leaves this driver's
+         * state alone, so a transfer queued for the previous session is
+         * orphaned: it never completes, busy never clears, and a second
+         * later the stall detector concludes the host has gone and shuts
+         * the stream off. The host is not gone - it is waiting for the
+         * frames that are no longer coming, and shows a blank picture.
+         *
+         * Google Meet does exactly this, opening once for the preview and
+         * again for the call. Applications that open the camera once and
+         * keep it - QuickTime, FaceTime, ffmpeg - never reach this path,
+         * which is why it survived until a two-open host tried it.
+         *
+         * So the session is restarted here on the same terms as a commit.
+         * The flush is deferred to the pump rather than done here: it
+         * touches indexed endpoint registers, and doing that inside the USB
+         * interrupt moves the register window out from under the endpoint-0
+         * state machine and drops the device off the bus.
+         */
+        if(intf->bInterfaceNumber == vs_intf_num) {
+            need_flush = 1;
+            busy = 0;
+            fid = 0;
+            stall_strikes = 0;
+            streaming = 1;
+        }
     } else if(event == USBD_EVENT_RESET) {
         streaming = 0;
         busy = 0;
@@ -321,6 +366,7 @@ void usbuvc_register(void) {
 
 void usbuvc_hook_notify(struct usbd_interface* vc, struct usbd_interface* vs) {
     probe_defaults();
+    vs_intf_num = vs->intf_num;
     vc->notify_handler = uvc_notify;
     /* The streaming interface is ours entirely: the class's handler starts
      * on an alternate setting this host never selects. */
@@ -340,6 +386,7 @@ void usbd_video_open(uint8_t busid, uint8_t intf) {
     need_flush = 1;
     busy = 0;
     fid = 0;
+    stall_strikes = 0;
     streaming = 1;
     printf("[uvc] streaming on\r\n");
 }
@@ -379,14 +426,35 @@ void usbuvc_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) {
 
     if(busy) {
         if((uint32_t)(busy_at - tim_get_cnt(TIM0)) > UVC_STALL_TICKS) {
-            printf("[uvc] host stopped reading, stream idle after %lu frames\r\n",
-                   (unsigned long)frames_sent);
             /* The abandoned frame must not be left for the next host to
              * collect: it would arrive before that session's first frame and
              * push every payload header out of place for good. */
             usbd_ep_flush(0, UVC_IN_EP);
-            streaming = 0;
             busy = 0;
+            /*
+             * Retry before concluding the host has gone.
+             *
+             * A transfer can be orphaned while the host is still very much
+             * there - it re-opens the stream and clears the endpoint halt,
+             * which resets the data toggle under anything already queued.
+             * Latching the stream off on the first such stall turned a
+             * recoverable hiccup into a camera that stayed blank until
+             * replug. Flushing and trying again costs one frame and fixes
+             * it, so give up only when repeated attempts get nowhere.
+             *
+             * "Nowhere" has to mean no progress, not just elapsed time:
+             * frames_sent advancing between stalls means the host is
+             * reading, however slowly, and is not gone at all.
+             */
+            if(frames_sent != stall_mark) {
+                stall_mark = frames_sent;
+                stall_strikes = 1;
+            } else if(++stall_strikes >= UVC_STALL_STRIKES) {
+                printf("[uvc] host stopped reading, stream idle after %lu frames\r\n",
+                       (unsigned long)frames_sent);
+                streaming = 0;
+                stall_strikes = 0;
+            }
         }
         frames_dropped++;
         return;
