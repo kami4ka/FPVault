@@ -17,6 +17,7 @@ import { spawn } from 'node:child_process'
 import { resolveBin } from '../tools/resolveBin.js'
 import { firmwareDir } from '../paths.js'
 import { downloadAsset, listReleases, type Release } from '../update/releases.js'
+import { firmwareAsset, ubootAsset } from '@shared/assets'
 import { validateImage } from '../update/dfu.js'
 import type { JobContext } from './queue.js'
 
@@ -117,10 +118,10 @@ export async function recoverOverFel(
 
   /* U-Boot is 414,840 bytes against the firmware's 80,096, so it dominates
    * the time; weight the bar accordingly rather than showing two bars. */
-  const fwAsset = release.assets.find((a) => a.name === 'fpvault.bin')
-  if (!fwAsset) throw new Error(`release ${tag} has no fpvault.bin`)
-  const ubAsset = release.assets.find((a) => a.name === 'u-boot-sunxi-with-spl.bin')
-  if (withUboot && !ubAsset) throw new Error(`release ${tag} has no u-boot-sunxi-with-spl.bin`)
+  const fwAsset = firmwareAsset(release.assets, release.tag)
+  if (!fwAsset) throw new Error(`release ${tag} has no firmware image`)
+  const ubAsset = ubootAsset(release.assets, release.tag)
+  if (withUboot && !ubAsset) throw new Error(`release ${tag} has no U-Boot image`)
 
   ctx.report(0.05, `downloading ${tag}`)
   const fw = await downloadAsset(release, fwAsset, dir)

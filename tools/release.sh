@@ -3,7 +3,7 @@
 #
 # Cut a FPVault release.
 #
-#   tools/release.sh v0.9.5 notes.md path/to/u-boot-sunxi-with-spl.bin \
+#   tools/release.sh v0.9.8 notes.md path/to/u-boot-sunxi-with-spl.bin \
 #       [--requires-recovery]
 #
 # Releases were hand-assembled before this, which is how v0.9.4 nearly went
@@ -58,7 +58,16 @@ num() { sed -n "s/^#define FW_VERSION_$1 \\([0-9]*\\)$/\\1/p" "$HERE/src/board.h
 NUMERIC="$(num MAJOR).$(num MINOR).$(num PATCH)"
 [ "$NUMERIC" = "$VERSION" ] || die "FW_VERSION_MAJOR/MINOR/PATCH say $NUMERIC but FW_VERSION_STR says $VERSION"
 
-echo "==> building firmware $VERSION"
+# The binary carries the commit it was built from in its banner. That is only
+# true if it was built from a commit: v0.9.7 was compiled a moment before its
+# version bump was committed, and make saw nothing to rebuild afterwards, so
+# it names the commit before the one its tag points at. Refuse to build from
+# a tree that differs from HEAD, and build from nothing.
+git -C "$HERE" diff --quiet HEAD -- src vendor Makefile uboot \
+  || die "src/, vendor/, uboot/ or the Makefile differ from HEAD; commit first"
+
+echo "==> building firmware $VERSION from $(git -C "$HERE" rev-parse --short HEAD)"
+rm -rf "$HERE/build"
 make -C "$HERE" >/dev/null
 BIN="$HERE/build/fpvault.bin"
 
@@ -95,9 +104,22 @@ else
   echo "    slot at 0x100000 and would deliver half of it."
 fi
 
+# Every file a release publishes says which release it is from. With the same
+# two names in every release, a file in a downloads folder could be any
+# version, and "the update did not help" could mean the old file was written
+# again. The U-Boot image gets the tag too even when it has not changed: it is
+# the name of the release it shipped in, not a claim that it is new.
+STAGE="$(mktemp -d)"
+trap 'rm -f "$BODY"; rm -rf "$STAGE"' EXIT
+FW_OUT="$STAGE/fpvault-$TAG.bin"
+UB_OUT="$STAGE/u-boot-sunxi-with-spl-$TAG.bin"
+cp "$BIN" "$FW_OUT"
+cp "$UBOOT" "$UB_OUT"
+echo "==> assets: $(basename "$FW_OUT"), $(basename "$UB_OUT")"
+
 echo "==> creating $TAG"
 gh release create "$TAG" \
   --title "$(head -1 "$NOTES" | sed 's/^#* *//')" \
   --notes-file "$BODY" \
   --prerelease \
-  "$BIN" "$UBOOT"
+  "$FW_OUT" "$UB_OUT"

@@ -5,6 +5,7 @@
 import { dfuDownload, validateImage } from '../update/dfu.js'
 import { firmwareDir } from '../paths.js'
 import { downloadAsset, listReleases, type Release } from '../update/releases.js'
+import { firmwareAsset } from '@shared/assets'
 import type { JobContext } from './queue.js'
 
 const KB = 1024
@@ -15,8 +16,8 @@ export interface FlashResult {
 }
 
 function findImage(release: Release) {
-  const asset = release.assets.find((a) => a.name === 'fpvault.bin')
-  if (!asset) throw new Error(`release ${release.tag} has no fpvault.bin`)
+  const asset = firmwareAsset(release.assets, release.tag)
+  if (!asset) throw new Error(`release ${release.tag} has no firmware image`)
   return asset
 }
 

@@ -4,10 +4,10 @@
  *
  * Two things about this project's releases shape the client. Every release
  * so far is flagged pre-release, so /releases/latest returns nothing useful
- * and the list endpoint has to be used instead. And the assets have flat,
- * unversioned names — fpvault.bin is called that in every release — so the
- * download cache has to be keyed by tag or one version would overwrite
- * another.
+ * and the list endpoint has to be used instead. And up to v0.9.7 the assets
+ * had the same names in every release, so the download cache is keyed by tag
+ * or one version would overwrite another. Later releases put the tag in the
+ * name; src/shared/assets.ts knows both.
  */
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'

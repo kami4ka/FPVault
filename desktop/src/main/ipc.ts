@@ -21,6 +21,7 @@ import { ffmpegAvailable } from './tools/ffmpeg.js'
 import { flashRelease } from './jobs/firmware.js'
 import { dfuAvailable } from './update/dfu.js'
 import { listReleases } from './update/releases.js'
+import { firmwareAsset, ubootAsset } from '@shared/assets'
 import { felAvailable, recoverOverFel } from './jobs/recover.js'
 import { JobQueue } from './jobs/queue.js'
 
@@ -319,8 +320,8 @@ export async function registerIpc(watcher: DeviceWatcher): Promise<void> {
       prerelease: r.prerelease,
       publishedAt: r.publishedAt,
       notes: r.notes.replace(/^[ \t]*FPVault-[A-Za-z-]+:[^\n]*\n?/gim, '').trimEnd(),
-      hasFirmware: r.assets.some((a) => a.name === 'fpvault.bin'),
-      hasUboot: r.assets.some((a) => a.name === 'u-boot-sunxi-with-spl.bin'),
+      hasFirmware: firmwareAsset(r.assets, r.tag) !== undefined,
+      hasUboot: ubootAsset(r.assets, r.tag) !== undefined,
       requiresRecovery: RECOVERY_TRAILER.test(r.notes)
     }))
   })

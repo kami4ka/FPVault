@@ -85,7 +85,10 @@ Power-cycle: the board boots into recording in ~5 s. UART never needed —
 though once U-Boot is on NOR, the serial `make deploy` flow above is the
 faster loop for iterating on firmware.
 
-Both binaries are attached to the project's GitHub Releases. To build
+Both binaries are attached to the project's GitHub Releases. From v0.9.8 their
+names carry the release tag - `fpvault-v0.9.8.bin`,
+`u-boot-sunxi-with-spl-v0.9.8.bin` - so a downloaded file says which version
+it is; substitute those names in the commands here. To build
 U-Boot from source instead (mainline v2026.07 + the two files in
 `uboot/`):
 
