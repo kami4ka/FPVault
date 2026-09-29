@@ -7,7 +7,7 @@
 Є також окремі інструкції для [macOS](ALPHA-MACOS.uk.md) і
 [Linux](ALPHA-LINUX.uk.md).
 
-Актуальна версія прошивки на момент написання — **v0.9.6**.
+Актуальна версія прошивки на момент написання — **v0.9.8**.
 
 > **Застосунок FPVault Desktop поки не використовуйте.** Він не підписаний
 > сертифікатом, і Windows SmartScreen його блокуватиме. Усе нижче робиться
@@ -33,8 +33,12 @@
 
 | файл | що це | куди пишеться |
 |---|---|---|
-| `u-boot-sunxi-with-spl.bin` | завантажувач | у NOR за адресою `0` |
-| `fpvault.bin` | прошивка | у NOR за адресою `0x100000` (1 МБ) |
+| `u-boot-sunxi-with-spl-v0.9.8.bin` | завантажувач | у NOR за адресою `0` |
+| `fpvault-v0.9.8.bin` | прошивка | у NOR за адресою `0x100000` (1 МБ) |
+
+> Імена файлів містять версію релізу. Якщо ви завантажили новіший реліз,
+> підставляйте в команди його імена — наприклад `fpvault-v0.9.9.bin`. Так
+> завжди видно, який саме файл ви пишете на плату.
 
 Потрібні **обидва**. Завантажувач містить виправлення, без якого плата
 вмикається лише тоді, коли до неї приєднаний послідовний перехідник — тож
@@ -106,8 +110,8 @@ Drivers\zadig-2.9.exe — встановлювач драйвера (підпи�
 Drivers\zadig.png     — знімок екрана, що саме вибрати у Zadig
 ```
 
-Розпакуйте у `C:\xfel` і покладіть туди ж `u-boot-sunxi-with-spl.bin` та
-`fpvault.bin`.
+Розпакуйте у `C:\xfel` і покладіть туди ж `u-boot-sunxi-with-spl-v0.9.8.bin` та
+`fpvault-v0.9.8.bin`.
 
 ### 4.2. Якщо Windows блокує xfel.exe
 
@@ -164,8 +168,8 @@ cd C:\xfel
 Тепер два записи — **спочатку завантажувач, потім прошивка**:
 
 ```powershell
-.\xfel.exe spinor write 0        u-boot-sunxi-with-spl.bin
-.\xfel.exe spinor write 0x100000 fpvault.bin
+.\xfel.exe spinor write 0        u-boot-sunxi-with-spl-v0.9.8.bin
+.\xfel.exe spinor write 0x100000 fpvault-v0.9.8.bin
 ```
 
 Завантажувач (≈415 КБ) пишеться близько хвилини, прошивка (≈85 КБ)
@@ -237,8 +241,8 @@ sudo sunxi-fel ver
 Очікується рядок з `AWUSBFEX` і `soc=00001663`. Далі:
 
 ```bash
-sudo sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl.bin
-sudo sunxi-fel -p spiflash-write 0x100000 fpvault.bin
+sudo sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl-v0.9.8.bin
+sudo sunxi-fel -p spiflash-write 0x100000 fpvault-v0.9.8.bin
 ```
 
 Перед перевіркою поверніть пристрій Windows:
@@ -382,7 +386,7 @@ SD (220 мкФ на стенді прибрали всі три відомі с�
 Після цього оновлення робиться однією командою:
 
 ```powershell
-.\dfu-util.exe -d 34b7:f1c2 -a 0 -D fpvault.bin
+.\dfu-util.exe -d 34b7:f1c2 -a 0 -D fpvault-v0.9.8.bin
 ```
 
 **Якщо ви на шляху B**, усе простіше — Zadig не потрібен зовсім.
@@ -390,7 +394,7 @@ SD (220 мкФ на стенді прибрали всі три відомі с�
 `34b7:f1c2`) і оновіть з Ubuntu:
 
 ```bash
-sudo dfu-util -d 34b7:f1c2 -a 0 -D fpvault.bin
+sudo dfu-util -d 34b7:f1c2 -a 0 -D fpvault-v0.9.8.bin
 ```
 
 Плата сама перевіряє образ, записує його, зчитує назад для звірки і лише
@@ -431,7 +435,7 @@ sudo dfu-util -d 34b7:f1c2 -a 0 -D fpvault.bin
 майже завжди означає, що плата вийшла з FEL.
 
 **Плата не вмикається без послідовного перехідника.** Записаний старий
-або непропатчений завантажувач. Перезапишіть `u-boot-sunxi-with-spl.bin`
+або непропатчений завантажувач. Перезапишіть `u-boot-sunxi-with-spl-v0.9.8.bin`
 саме з релізу.
 
 **Плата не записує, хоча картка вставлена.** Швидше за все вона
@@ -454,8 +458,8 @@ sudo dfu-util -d 34b7:f1c2 -a 0 -D fpvault.bin
 ```powershell
 .\xfel.exe version
 .\xfel.exe spinor
-.\xfel.exe spinor write 0        u-boot-sunxi-with-spl.bin
-.\xfel.exe spinor write 0x100000 fpvault.bin
+.\xfel.exe spinor write 0        u-boot-sunxi-with-spl-v0.9.8.bin
+.\xfel.exe spinor write 0x100000 fpvault-v0.9.8.bin
 ```
 
 **Шлях B — WSL2.** Один раз: `wsl --install -d Ubuntu`,
@@ -470,8 +474,8 @@ usbipd attach --wsl --busid <BUSID>
 
 ```bash
 sudo sunxi-fel ver
-sudo sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl.bin
-sudo sunxi-fel -p spiflash-write 0x100000 fpvault.bin
+sudo sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl-v0.9.8.bin
+sudo sunxi-fel -p spiflash-write 0x100000 fpvault-v0.9.8.bin
 ```
 
 Перезавантажити живлення — і плата готова.

@@ -7,7 +7,7 @@
 Є також окремі інструкції для [Windows](ALPHA-WINDOWS.uk.md) і
 [macOS](ALPHA-MACOS.uk.md).
 
-Актуальна версія прошивки на момент написання — **v0.9.6**.
+Актуальна версія прошивки на момент написання — **v0.9.8**.
 
 Linux — найкоротший шлях із трьох: інструменти є у штатних репозиторіях,
 драйверів ставити не треба (libusb працює з пристроєм напряму), а питання
@@ -31,8 +31,12 @@ Linux — найкоротший шлях із трьох: інструмент�
 
 | файл | що це | куди пишеться |
 |---|---|---|
-| `u-boot-sunxi-with-spl.bin` | завантажувач | у NOR за адресою `0` |
-| `fpvault.bin` | прошивка | у NOR за адресою `0x100000` (1 МБ) |
+| `u-boot-sunxi-with-spl-v0.9.8.bin` | завантажувач | у NOR за адресою `0` |
+| `fpvault-v0.9.8.bin` | прошивка | у NOR за адресою `0x100000` (1 МБ) |
+
+> Імена файлів містять версію релізу. Якщо ви завантажили новіший реліз,
+> підставляйте в команди його імена — наприклад `fpvault-v0.9.9.bin`. Так
+> завжди видно, який саме файл ви пишете на плату.
 
 Потрібні **обидва**. Завантажувач містить виправлення, без якого плата
 вмикається лише тоді, коли до неї приєднаний послідовний перехідник — тож
@@ -168,8 +172,8 @@ sunxi-fel spiflash-info
 Тепер два записи — **спочатку завантажувач, потім прошивка**:
 
 ```sh
-sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl.bin
-sunxi-fel -p spiflash-write 0x100000 fpvault.bin
+sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl-v0.9.8.bin
+sunxi-fel -p spiflash-write 0x100000 fpvault-v0.9.8.bin
 ```
 
 `-p` показує смужку прогресу. Завантажувач (≈415 КБ) пишеться близько
@@ -307,7 +311,7 @@ SD (220 мкФ на стенді прибрали всі три відомі с�
 через DFU по тому ж кабелю, і SW2 натискати не треба.
 
 ```sh
-dfu-util -d 34b7:f1c2 -a 0 -D fpvault.bin
+dfu-util -d 34b7:f1c2 -a 0 -D fpvault-v0.9.8.bin
 ```
 
 (якщо не робили правила `udev` з розділу 3 — додайте `sudo`)
@@ -338,7 +342,7 @@ dfu-util -d 34b7:f1c2 -a 0 -D fpvault.bin
 плата майже напевно вийшла з FEL.
 
 **Плата не вмикається без послідовного перехідника.** Записаний старий
-або непропатчений завантажувач. Перезапишіть `u-boot-sunxi-with-spl.bin`
+або непропатчений завантажувач. Перезапишіть `u-boot-sunxi-with-spl-v0.9.8.bin`
 саме з релізу.
 
 **`/dev/video0` є, але це вбудована вебкамера.** Номери залежать від
@@ -371,8 +375,8 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 cd ~/Downloads
 sunxi-fel ver
 sunxi-fel spiflash-info
-sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl.bin
-sunxi-fel -p spiflash-write 0x100000 fpvault.bin
+sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl-v0.9.8.bin
+sunxi-fel -p spiflash-write 0x100000 fpvault-v0.9.8.bin
 ```
 
 Перезавантажити живлення — і плата готова.
