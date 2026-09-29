@@ -24,6 +24,8 @@ static vejpeg_cfg_t cfg = {
 
 static volatile uint32_t head = 0, tail = 0;
 static volatile uint32_t slot_len[BSRING_SLOTS];
+static volatile uint16_t slot_h[BSRING_SLOTS]; /* lines, as encoded */
+static uint16_t enc_h;                         /* of the encode in flight */
 
 static volatile uint8_t enc_busy = 0;
 static volatile uint8_t frozen = 0;
@@ -100,6 +102,7 @@ void pipeline_tick(void) {
         int32_t r = vejpeg_poll_done();
         if(r >= 0) {
             slot_len[head % BSRING_SLOTS] = (uint32_t)r;
+            slot_h[head % BSRING_SLOTS] = enc_h;
             head++; /* publish AFTER the length */
             enc_busy = 0;
             enc_frames++;
@@ -129,10 +132,32 @@ void pipeline_tick(void) {
             ring_drops++;
             enc_pending = -1;
         } else {
-            cfg.h = capture_height();
-            vejpeg_start(&cfg, (uint32_t)capture_y(enc_pending),
-                         (uint32_t)capture_c(enc_pending),
-                         slot_base(head) + BSRING_DATA_OFF,
+            /*
+             * What is encoded is what the consumer was promised.
+             *
+             * The recorder takes the input as it comes. A USB host does
+             * not: it was offered one frame size when the board enumerated,
+             * committed to it, and laid itself out for it. A frame of any
+             * other height is thrown away on arrival - macOS collected 25
+             * frames a second of 576 lines against a 480-line commitment
+             * and showed none of them. So while a host owns the board the
+             * frame is made to the advertised height whatever the input
+             * is: the middle 480 lines of a 576-line picture, or a
+             * 480-line picture with black below it to 576.
+             */
+            uint32_t src_h = capture_height(), out_h = src_h;
+            uint32_t y = (uint32_t)capture_y(enc_pending);
+            uint32_t c = (uint32_t)capture_c(enc_pending);
+
+            if(recorder_usb_mode()) out_h = usbuvc_frame_height();
+            if(out_h < src_h) {
+                uint32_t skip = (src_h - out_h) / 2u;
+                y += skip * CAP_FW;
+                c += (capture_fmt() == CAP_FMT_420 ? skip / 2u : skip) * CAP_FW;
+            }
+            cfg.h = (uint16_t)out_h;
+            enc_h = (uint16_t)out_h;
+            vejpeg_start(&cfg, y, c, slot_base(head) + BSRING_DATA_OFF,
                          BSRING_SLOT_SIZE - BSRING_DATA_OFF);
             enc_start_t = tim_get_cnt(TIM0);
             enc_busy = 1;
@@ -147,6 +172,10 @@ void pipeline_tick(void) {
     }
 }
 
+uint16_t pipeline_slot_height(uint32_t slot_base) {
+    return slot_h[((slot_base - BSRING_BASE) / BSRING_SLOT_SIZE) % BSRING_SLOTS];
+}
+
 uint32_t pipeline_finish_jpeg(uint32_t slot_base, uint32_t bitstream_len, int quality) {
     /* Recomputed only when quality or geometry changes; the block is a pure
      * function of those two, so it is staged once and memcpy'd into each
@@ -155,7 +184,10 @@ uint32_t pipeline_finish_jpeg(uint32_t slot_base, uint32_t bitstream_len, int qu
     static uint16_t staged_h = 0;
     static int staged_quality = -1;
     uint8_t* slot = (uint8_t*)slot_base;
-    uint16_t h = capture_height();
+    /* The height this frame was encoded at, not the input's height now:
+     * the two differ for a frame still in the ring when the input changes,
+     * and for every frame made to a host's size. */
+    uint16_t h = pipeline_slot_height(slot_base);
     uint32_t i;
 
     if(quality != staged_quality || h != staged_h) {

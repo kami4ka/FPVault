@@ -94,6 +94,7 @@
 #define BC_CRASH_MAGIC    0xDEADFA11u
 #define BC_ALIVE_MAGIC    0xA11FE001u
 #define BC_REBOOT_MAGIC   0x5EB0075Eu  /* bc[6]: reset was asked for (console :r, DFU) */
+#define BC_FAKEPAL_MAGIC  0xFA4E0625u  /* bc[8]: bench PAL emulation, kept across a reset */
 
 #define CAP_PLANE_SPACING 0x400000u              /* 4 MB */
 #define CAP_NBUF          3

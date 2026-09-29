@@ -123,6 +123,9 @@
  * one offered, so a 720x576 entry got it expecting 576 lines of a 480-line
  * picture. */
 void usbuvc_apply_standard(uint8_t* desc, uint32_t len);
+/* Lines in the one frame the descriptor offers, fixed from enumeration
+ * until the next power-up. Every frame sent has this many. */
+uint16_t usbuvc_frame_height(void);
 
 /* True while a host has the stream open. The class drives this through its
  * usbd_video_open/close callbacks, which src/usbuvc.c implements. */

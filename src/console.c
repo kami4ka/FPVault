@@ -104,7 +104,7 @@ static void dispatch(char c) {
     case 'v': enctest_info(); break;
     case 'Q':
         capture_bench_fake_pal(!capture_bench_is_fake_pal());
-        printf("[cap] bench: PAL emulation %s (reports %ux%u)\r\n",
+        printf("[cap] bench: PAL emulation %s (reports %ux%u), kept across :r\r\n",
                capture_bench_is_fake_pal() ? "ON" : "off", (unsigned)CAP_FW,
                (unsigned)capture_height());
         break;

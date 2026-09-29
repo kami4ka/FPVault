@@ -192,20 +192,27 @@ static struct usbd_endpoint uvc_in_ep = {
 
 static uint8_t probe_ctrl[UVC_PROBE_LEN];
 
+/* The frame the descriptor offers: written once, when the board enumerates,
+ * and true until the next power-up. */
+static uint16_t adv_h = 480;
+static uint8_t adv_pal = 0;
+
+uint16_t usbuvc_frame_height(void) {
+    return adv_h;
+}
+
 /*
- * Fill the negotiated structure from what the board is actually capturing.
+ * Fill the negotiated structure from what was advertised.
  *
- * Two frame descriptors are advertised, 720x480 at 29.97 and 720x576 at 25,
- * because the input can be either and capture_follow_input() switches at
- * runtime. But only one of them is true at any moment, and the board cannot
- * produce the other. So probe answers with the one that matches the live
- * signal rather than with whatever the host asked for. That is exactly what
- * probe negotiation is for: the host proposes, the device answers with what
- * it will really do, and the host is expected to take that answer.
+ * One frame is offered, so there is one answer, and it has to be the
+ * advertised one. This used to answer from the live signal instead, and with
+ * a PAL camera that meant a frame interval of 40 ms against a descriptor
+ * that listed only 33.4: an answer from outside the list the host had been
+ * given to choose from. What the host is told here and what it is sent must
+ * both come from that list.
  */
 static void probe_defaults(void) {
-    int pal = (capture_standard() == VID_PAL);
-    uint32_t interval = pal ? UVC_INTERVAL_PAL : UVC_INTERVAL_NTSC;
+    uint32_t interval = adv_pal ? UVC_INTERVAL_PAL : UVC_INTERVAL_NTSC;
     uint32_t maxframe = UVC_MAX_FRAME_SIZE;
 
     for(unsigned i = 0; i < UVC_PROBE_LEN; i++) probe_ctrl[i] = 0;
@@ -275,10 +282,8 @@ static int uvc_vs_request(uint8_t busid, struct usb_setup_packet* setup,
         *len = 1;
         return 0;
     case UVC_SET_CUR:
-        /* What the host proposes is noted and then answered with what the
-         * board will really send, which probe_defaults() takes from the live
-         * signal. A host that asks for the PAL frame while the input is NTSC
-         * would otherwise expect 576 lines and be handed 480. */
+        /* What the host proposes is noted and then answered with the one
+         * frame on offer, which is also what it will be sent. */
         if(*len >= 26) {
             const uint8_t* q = *data;
             uint32_t iv = (uint32_t)q[4] | ((uint32_t)q[5] << 8) |
@@ -385,15 +390,22 @@ static void uvc_notify(uint8_t busid, uint8_t event, void* arg) {
  * in it constant - and those lengths are checked against the bytes by
  * tests/host/test_uvcdesc.c.
  *
- * The signal can still change later; capture_follow_input() switches at
- * runtime. That would need a replug to re-advertise, which is worth a note
- * rather than machinery, since the board's mode already works that way.
+ * The input can still change later, or appear only after the board has
+ * enumerated. What was advertised cannot change without a replug, so the
+ * frames do instead: from then on they are made to the advertised size,
+ * cropped or padded - see the encode start in pipeline.c. main() waits for
+ * the input's standard before calling this, so with a camera connected at
+ * power-up the two agree and none of that is needed.
  */
 void usbuvc_apply_standard(uint8_t* desc, uint32_t len) {
     int pal = (capture_standard() == VID_PAL);
     uint16_t h = pal ? 576 : 480;
     uint32_t iv = pal ? UVC_INTERVAL_PAL : UVC_INTERVAL_NTSC;
     uint32_t i;
+
+    adv_h = h;
+    adv_pal = (uint8_t)pal;
+    DLOG("uvc advertising 720x%u at %s", (unsigned)h, pal ? "25" : "29.97");
 
     for(i = 0; i + 1 < len; i++) {
         /* CS_INTERFACE, VS_FRAME_MJPEG */
@@ -444,8 +456,8 @@ void usbd_video_open(uint8_t busid, uint8_t intf) {
     stall_strikes = 0;
     streaming = 1;
     printf("[uvc] streaming on\r\n");
-    DLOG("uvc streaming on, advertised %s, capturing %ux%u",
-         capture_standard() == VID_PAL ? "PAL" : "NTSC", (unsigned)CAP_FW,
+    DLOG("uvc streaming on: sending 720x%u at %s, input is %s 720x%u", (unsigned)adv_h,
+         adv_pal ? "25" : "29.97", capture_standard() == VID_PAL ? "PAL" : "NTSC",
          (unsigned)capture_height());
 }
 
@@ -568,6 +580,36 @@ void usbuvc_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) {
     if(!streaming) {
         last_valid = 0;
         return;
+    }
+
+    /* The last gate: nothing leaves that is not the advertised frame. In
+     * USB mode every frame is already encoded to that height, so this only
+     * catches the few still in the ring from before the mode was entered. */
+    if(pipeline_slot_height(slot_base) != adv_h) {
+        frames_dropped++;
+        return;
+    }
+    {
+        /* Say so when the input and the stream stop or start agreeing. */
+        static uint8_t told = 0xFF;
+        uint8_t now = (uint8_t)(capture_standard() == VID_PAL);
+        if(now != told) {
+            told = now;
+            if(now == adv_pal)
+                DLOG("uvc input is %s, same as the stream: frames go out as captured",
+                     now ? "PAL 720x576" : "NTSC 720x480");
+            else
+                DLOG("uvc input is %s but the stream is 720x%u: %s", now ? "PAL 720x576"
+                                                                           : "NTSC 720x480",
+                     (unsigned)adv_h,
+                     now ? "sending the middle 480 lines"
+                         : "sending it with black below, 5 frames in 6");
+        }
+    }
+    /* No faster than advertised either: 29.97 into a 25 fps stream. */
+    if(adv_pal && capture_standard() != VID_PAL) {
+        static uint32_t n = 0;
+        if((++n % 6u) == 0u) return;
     }
     seen_since++;
 

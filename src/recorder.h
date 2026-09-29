@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 int recorder_active(void);
+int recorder_usb_mode(void); /* a host owns the card; nothing is recorded */
 
 /* Manual toggle: stop pauses auto-record until toggled again. */
 void recorder_toggle(void);

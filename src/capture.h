@@ -57,6 +57,12 @@ const uint8_t* capture_c(int buf);
 void capture_follow_input(void);
 
 vid_std_e capture_standard(void);
+/* Wait, at boot, until the input's standard is known: a locked signal whose
+ * line count agrees with the standard the decoder is set to. Auto-follow
+ * does the switching meanwhile. Returns 1 once that has held for a quarter
+ * of a second, 0 if there is no signal or max_ms ran out - the standard is
+ * then whatever it was, NTSC from power-up. */
+int capture_wait_standard(uint32_t max_ms);
 uint16_t capture_height(void); /* 480 or 576 */
 cap_fmt_e capture_fmt(void);
 uint32_t capture_state(void); /* raw TVD_STATE_0 */

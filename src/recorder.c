@@ -103,6 +103,10 @@ static uint32_t frame_period_ticks(void) {
     return (capture_standard() == VID_PAL) ? 960000u : 800800u;
 }
 
+int recorder_usb_mode(void) {
+    return state == REC_USB_MODE;
+}
+
 int recorder_active(void) {
     return state == REC_RECORDING;
 }

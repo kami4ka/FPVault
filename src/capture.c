@@ -15,6 +15,7 @@
 #include "f1c100s_tvd.h"
 #include "f1c100s_de.h"
 #include "f1c100s_tve.h"
+#include "f1c100s_timer.h"
 
 #define NBUF CAP_NBUF
 
@@ -106,10 +107,28 @@ static void ring_restart(void) {
 }
 
 /* ---- standard / format --------------------------------------------------- */
+/* Rows 480 to 575 of every buffer, black. A 525-line picture stops at row
+ * 480 and the decoder writes nothing below it, but a consumer may be owed a
+ * 576-line frame all the same - see the stream geometry in pipeline.c - and
+ * what it then reads below the picture has to be black rather than the
+ * bottom of whatever the buffer held before. */
+static void blank_below_480(void) {
+    uint32_t b, i;
+    uint32_t c_from = (fmt == CAP_FMT_420 ? 240u : 480u) * CAP_FW;
+    uint32_t c_to = (fmt == CAP_FMT_420 ? 288u : 576u) * CAP_FW;
+    for(b = 0; b < NBUF; b++) {
+        for(i = 480u * CAP_FW; i < 576u * CAP_FW; i++)
+            CAPY[b][i] = 0x10;
+        for(i = c_from; i < c_to; i++)
+            CAPC[b][i] = 0x80;
+    }
+}
+
 void capture_set_standard(vid_std_e s) {
     tvd_disable();
     vid_std = s;
     FH = (s == VID_PAL) ? 576u : 480u;
+    if(s != VID_PAL) blank_below_480();
 
     /* Ring reset: FH just changed, every stamped row is at the old height
      * and would never read as erased. */
@@ -336,19 +355,60 @@ void capture_follow_input(void) {
  * with a 625-line source, which is how a PAL fault can be studied on a bench
  * that only has an NTSC camera. The picture's bottom 96 lines are whatever
  * was in memory; it is the format that is under test, not the image. */
-static uint8_t fake_pal = 0;
+/* Kept in the reset breadcrumbs, so that ":Q" then ":r" boots as a board
+ * that had a PAL camera connected from power-up - which is when the USB
+ * descriptor is written. A cold start always clears it. */
+static uint8_t fake_pal = 0, fake_pal_known = 0;
+
+static void fake_pal_load(void) {
+    if(fake_pal_known) return;
+    fake_pal_known = 1;
+    fake_pal = ((volatile uint32_t*)BREADCRUMB_BASE)[8] == BC_FAKEPAL_MAGIC;
+}
 
 void capture_bench_fake_pal(int on) {
+    fake_pal_known = 1;
     fake_pal = (uint8_t)(on != 0);
+    ((volatile uint32_t*)BREADCRUMB_BASE)[8] = on ? BC_FAKEPAL_MAGIC : 0u;
 }
 int capture_bench_is_fake_pal(void) {
+    fake_pal_load();
     return fake_pal;
 }
 
+int capture_wait_standard(uint32_t max_ms) {
+    uint32_t t0 = tim_get_cnt(TIM0), held_from = 0;
+    int holding = 0, seen_lock = 0;
+
+    for(;;) {
+        uint32_t el = (uint32_t)(t0 - tim_get_cnt(TIM0)) / (TICKS_PER_SEC / 1000u);
+        uint32_t st = tvd_get_state();
+        int locked = !(st & TVD_ST_NO_SIGNAL) && (st & TVD_ST_V_LOCK);
+        vid_std_e in = (st & TVD_ST_625_LINES) ? VID_PAL : VID_NTSC;
+
+        if(locked) seen_lock = 1;
+        if(locked && in == vid_std) {
+            if(!holding) {
+                holding = 1;
+                held_from = el;
+            } else if(el - held_from >= 250u) {
+                return 1;
+            }
+        } else {
+            holding = 0;
+        }
+        /* Nothing connected: no reason to hold the boot up for it. */
+        if(!seen_lock && el >= 700u) return 0;
+        if(el >= max_ms) return 0;
+    }
+}
+
 vid_std_e capture_standard(void) {
+    fake_pal_load();
     return fake_pal ? VID_PAL : vid_std;
 }
 uint16_t capture_height(void) {
+    fake_pal_load();
     return fake_pal ? 576u : FH;
 }
 cap_fmt_e capture_fmt(void) {

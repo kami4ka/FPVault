@@ -130,6 +130,24 @@ int main(void) {
     /* Debug build: the log file has to be found or made before USB exists.
      * Once a host has the card mounted, the filesystem is the host's. */
     dlog_prepare();
+    /* The USB descriptor offers one frame size and is written once, in
+     * usbmsc_init(). It should be the size the camera really gives, and
+     * that takes a moment to know: auto-follow needs 0.6 s of agreement
+     * before it moves off NTSC. Without the wait a PAL camera was always
+     * advertised as 720x480. */
+    {
+        uint32_t t0 = tim_get_cnt(TIM0);
+        int known = capture_wait_standard(2000);
+        uint32_t ms = (uint32_t)(t0 - tim_get_cnt(TIM0)) / (TICKS_PER_SEC / 1000u);
+        printf("[cap] input at boot: %s after %lu ms\r\n",
+               !known ? "not known, NTSC assumed"
+                      : capture_standard() == VID_PAL ? "PAL 720x576" : "NTSC 720x480",
+               (unsigned long)ms);
+        DLOG("cap input at boot: %s after %lu ms",
+             !known ? "not known, NTSC assumed"
+                    : capture_standard() == VID_PAL ? "PAL 720x576" : "NTSC 720x480",
+             (unsigned long)ms);
+    }
     usbmsc_init();
 
     /* Mode fork: USB is this board's power source, so a host can only be
