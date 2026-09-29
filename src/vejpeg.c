@@ -96,6 +96,22 @@ int32_t vejpeg_poll_done(void) {
     return VEJPEG_ERR_TIMEOUT;
 }
 
+uint32_t vejpeg_abort(void) {
+    uint32_t st = ve_r(VE_AVC_STATUS);
+    volatile int i;
+    ve_w(VE_AVC_STATUS, st | 0xf);
+    /* Same engine-level reset ve_init() ends with. Every register the encode
+     * needs is reprogrammed by vejpeg_start(), quantizer tables included, so
+     * nothing has to be restored here. */
+    ve_w(VE_CTRL, 0x00130007u);
+    for(i = 0; i < 100; i++)
+        ;
+    /* The write offset carries over between encodes on VE 1663 and is only
+     * taken with the engine idle - which, after the reset, it is. */
+    ve_w(VE_AVC_VLE_OFFSET, 0);
+    return st & 0xf;
+}
+
 int32_t vejpeg_wait(uint32_t timeout_us) {
     uint32_t t0 = tim_get_cnt(TIM0); /* down-counter at 24 MHz */
     for(;;) {

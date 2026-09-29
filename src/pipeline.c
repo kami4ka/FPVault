@@ -33,6 +33,8 @@ static uint32_t follow_div = 0;
 /* stats */
 static volatile uint32_t enc_frames = 0, enc_fails = 0, ring_drops = 0;
 static uint32_t ring_hiwater = 0;
+/* Encodes abandoned on timeout, and the status bits of the last one. */
+static volatile uint32_t enc_aborts = 0, enc_abort_st = 0;
 
 static uint32_t slot_base(uint32_t idx) {
     return BSRING_BASE + (idx % BSRING_SLOTS) * BSRING_SLOT_SIZE;
@@ -79,7 +81,14 @@ void pipeline_tick(void) {
 
     if(!on) return;
 
-    if(capture_tick()) enc_pending = capture_prev();
+    /* A frame that completes without a locked signal is not a picture. With
+     * the input gone the decoder free-runs and fills buffers with whatever
+     * the floating pin gives it; encoding that costs the VE its worst case
+     * and hands the host snow. Skipping it leaves the host holding the last
+     * good frame, which is what a camera shutter closing should look like,
+     * and the recorder already accounts a dropout by time rather than by
+     * the frames that arrive during it. */
+    if(capture_tick()) enc_pending = capture_signal_ok() ? capture_prev() : -1;
 
     if(enc_busy) {
         int32_t r = vejpeg_poll_done();
@@ -92,8 +101,14 @@ void pipeline_tick(void) {
             enc_busy = 0;
             enc_fails++;
         } else if((uint32_t)(enc_start_t - tim_get_cnt(TIM0)) / 24u > 50000u) {
+            /* Walking away from an encode is only safe if nothing of it is
+             * left behind. This used to clear enc_busy and no more, so a
+             * stalled engine, its status bits and its write offset were all
+             * inherited by the next encode. */
+            enc_abort_st = vejpeg_abort();
             enc_busy = 0;
             enc_fails++;
+            enc_aborts++;
         }
     }
 
@@ -186,6 +201,19 @@ void pipeline_stats(void) {
            (unsigned long)enc_fails, (unsigned long)(head - tail),
            (unsigned long)BSRING_SLOTS, (unsigned long)ring_hiwater,
            (unsigned long)ring_drops, capture_signal_ok() ? "LOCK" : "no-signal");
+    /* Said once per recovery, not once per second ever after: a line that
+     * repeats forever stops being read. */
+    {
+        static uint32_t told_kicks = 0, told_aborts = 0;
+        if(capture_kicks() != told_kicks || enc_aborts != told_aborts) {
+            told_kicks = capture_kicks();
+            told_aborts = enc_aborts;
+            printf("[pipe] recovered: ring restarts %lu, encode aborts %lu "
+                   "(last status %lx)\r\n",
+                   (unsigned long)told_kicks, (unsigned long)told_aborts,
+                   (unsigned long)enc_abort_st);
+        }
+    }
     last_in = in;
     last_enc = enc_frames;
 }

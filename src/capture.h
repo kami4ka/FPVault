@@ -63,3 +63,7 @@ uint32_t capture_state(void); /* raw TVD_STATE_0 */
 int capture_signal_ok(void);  /* V_LOCK present, NO_SIGNAL absent */
 uint32_t capture_frames(void);
 uint32_t capture_std_switches(void);
+/* Times the ring was restarted because a locked signal completed no frame
+ * for 200 ms - see the watchdog in capture.c. Zero in a healthy run; one per
+ * signal dropout that landed in the wrong part of a frame. */
+uint32_t capture_kicks(void);

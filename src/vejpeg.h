@@ -45,6 +45,13 @@ void vejpeg_start(const vejpeg_cfg_t* cfg, uint32_t phy_y, uint32_t phy_c,
 #define VEJPEG_ERR_FAILED  (-2)
 int32_t vejpeg_wait(uint32_t timeout_us);
 
+/* Give up on the encode in flight and leave the engine fit to start another:
+ * status cleared, the VLE write offset zeroed, the engine reset. For callers
+ * that time an encode out themselves - a timeout is only safe to walk away
+ * from if nothing of the abandoned encode is left behind. Returns the status
+ * bits as they stood, for the log. */
+uint32_t vejpeg_abort(void);
+
 /* Non-blocking check: VEJPEG_ERR_TIMEOUT while still encoding, else the
  * length (or FAILED) with status cleared. For the IRQ-driven pipeline. */
 int32_t vejpeg_poll_done(void);

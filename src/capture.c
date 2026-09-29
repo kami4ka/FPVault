@@ -49,6 +49,11 @@ static uint8_t armed = 0; /* next buffer address handed to the TVD early */
 
 static uint32_t frames = 0, std_switches = 0;
 
+/* Ring watchdog. idle counts 1 kHz ticks during which the signal is locked
+ * and yet no frame completes; kicks counts the restarts that followed. */
+static uint32_t idle = 0, kicks = 0;
+static uint8_t kick_streak = 0;
+
 /* ---- sentinel ------------------------------------------------------------
  * Stamp 0x5A across two Y rows of the buffer being filled:
  *   ARM  ~80% down, forced odd (lands late in the second field either way);
@@ -81,6 +86,22 @@ static int row_erased(int b, uint32_t r) {
 static void sentinel_stamp(int b) {
     row_stamp(b, SENT_ARM_ROW);
     row_stamp(b, SENT_DONE_ROW);
+}
+
+/* ---- ring restart --------------------------------------------------------
+ * Put the DMA and the ring back to their starting position without touching
+ * the decoder itself, so line and field lock survive. The buffer is stamped
+ * before the DMA is re-enabled: stamping afterwards could overwrite rows the
+ * DMA had already filled and the frame would never read as complete. */
+static void ring_restart(void) {
+    tvd_disable();
+    wr = 0;
+    done = -1;
+    safe = -1;
+    armed = 0;
+    sentinel_stamp(wr);
+    tvd_set_out_buf(CAPY[wr], CAPC[wr]);
+    tvd_enable();
 }
 
 /* ---- standard / format --------------------------------------------------- */
@@ -154,7 +175,52 @@ void capture_stop(void) {
  *        rotates. Consumers still get the buffer completed one full cycle
  *        earlier - belt and braces.
  */
+/*
+ * The watchdog, and why the ring needs one.
+ *
+ * The two-phase advance assumes a frame that starts also finishes. When the
+ * signal drops between the ARM row and the DONE row that stops being true:
+ * the next buffer's address has already been handed over, the decoder
+ * re-locks and - as it always does - restarts at row 0 of whatever address
+ * it holds, which is now the NEXT buffer. The current buffer's DONE row is
+ * never overwritten, armed stays set, and nothing rotates again. The signal
+ * is back, the decoder is locked, the DMA is writing, and the ring waits
+ * forever on a row nobody will touch.
+ *
+ * Seen on the bench exactly so: "tvd status 0e, signal ok, in 0 fps", after
+ * the camera cable was pulled and put back. A thermal camera does the same
+ * thing to itself every time it flips its shutter.
+ *
+ * A locked signal that completes no frame for 200 ms - six frame periods -
+ * is therefore a wedge, not a slow frame. Time without lock does not count:
+ * no signal means no frames and that is nobody's fault, and counting it
+ * would restart the ring in a loop for as long as the cable stayed out.
+ *
+ * The restart leaves the decoder alone. If three in a row achieve nothing
+ * the decoder is reprogrammed as well, which costs it its lock but also
+ * clears anything the lighter restart cannot reach.
+ */
+#define WEDGE_TICKS 200u
+#define WEDGE_ESCALATE 3u
+
+static void ring_watchdog(void) {
+    if(!capture_signal_ok()) {
+        idle = 0;
+        return;
+    }
+    if(++idle < WEDGE_TICKS) return;
+    idle = 0;
+    kicks++;
+    if(++kick_streak >= WEDGE_ESCALATE) {
+        kick_streak = 0;
+        capture_set_standard(vid_std);
+    } else {
+        ring_restart();
+    }
+}
+
 int capture_tick(void) {
+    ring_watchdog();
     if(!armed && row_erased(wr, SENT_ARM_ROW)) {
         int nx = (wr + 1) % NBUF;
         tvd_set_out_buf(CAPY[nx], CAPC[nx]);
@@ -167,6 +233,8 @@ int capture_tick(void) {
         sentinel_stamp(wr);
         armed = 0;
         frames++;
+        idle = 0;
+        kick_streak = 0;
         return safe >= 0;
     }
     return 0;
@@ -254,4 +322,7 @@ uint32_t capture_frames(void) {
 }
 uint32_t capture_std_switches(void) {
     return std_switches;
+}
+uint32_t capture_kicks(void) {
+    return kicks;
 }
