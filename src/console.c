@@ -102,6 +102,14 @@ static void dispatch(char c) {
     case '6':
     case '7': enctest_set_fmt((uint8_t)(c - '0')); break;
     case 'v': enctest_info(); break;
+    case 'P':
+        /* Bench: flip the capture standard once, the way a disturbed signal
+         * can make auto-follow do. Auto-follow puts it back by itself about
+         * 0.6 s later, so this reproduces a glitch-induced flip end to end. */
+        capture_set_standard(capture_standard() == VID_PAL ? VID_NTSC : VID_PAL);
+        printf("[cap] bench: standard flipped to %s\r\n",
+               capture_standard() == VID_PAL ? "PAL" : "NTSC");
+        break;
     case 'n': { /* NOR self-test: JEDEC id + first 4 KB of the fw slot vs RAM */
         static uint8_t rb[4096];
         uint32_t id = spinor_read_id();

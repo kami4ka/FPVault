@@ -134,6 +134,7 @@ int main(void) {
             /* Drain encoded frames to the recorder (may block on SD -
              * the IRQ pipeline keeps capturing regardless). */
             pipeline_consume();
+            usbuvc_poll();
             usbdfu_poll();
 
             /* LED: 8-bit state pattern, one bit per 125 ms. */

@@ -70,6 +70,35 @@ static uint32_t stall_mark = 0;
 static uint8_t stall_strikes = 0;
 
 /*
+ * Keep-alive: what the host is sent while there is nothing new to send.
+ *
+ * A stream that goes quiet is not neutral. Watched on a Windows host with
+ * the pipeline paused: 3.5 s into the silence it cleared the endpoint halt,
+ * which is how Windows stops a bulk stream, and then negotiated a new one.
+ * That application restarts itself. One that does not is left showing its
+ * last frame until someone closes and reopens it - which is what a thermal
+ * camera's shutter was doing to the testers, each time it interrupted the
+ * signal for longer than their software was willing to wait.
+ *
+ * So while the signal is away the last good frame is sent again, ten times
+ * a second. The host sees a camera whose picture has stopped moving rather
+ * than a camera that has stopped, and needs no restarting when the picture
+ * moves again. The frame goes out of the same ring slot it was first sent
+ * from: with no new frames the producer is not advancing, so the slot is
+ * not going anywhere.
+ */
+#define UVC_KEEPALIVE_TICKS (TICKS_PER_SEC / 10u)
+/* Frames that may arrive after a slot was sent before it stops being safe
+ * to send again. The ring holds 40; half of that leaves no doubt. */
+#define UVC_KEEPALIVE_MAX_AGE 20u
+
+static uint32_t last_base = 0, last_total = 0; /* last frame queued */
+static uint32_t last_queue_at = 0;             /* TIM0 when it was */
+static uint32_t seen_since = 0;                /* frames arrived since */
+static uint8_t last_valid = 0;
+static uint32_t keepalives = 0;
+
+/*
  * How long to wait for a transfer before deciding the host has gone.
  *
  * With one alternate setting there is no stop signal: macOS sends
@@ -399,6 +428,79 @@ void usbd_video_close(uint8_t busid, uint8_t intf) {
 }
 
 /*
+ * Is the endpoint free to take a frame? Deals with everything that can be
+ * in the way first: a flush owed to a new session, and a transfer the host
+ * never collected. Called from the main loop only, never the IRQ.
+ */
+static int uvc_ready(void) {
+    /* Start each session from a known-empty endpoint. A frame left queued by
+     * a host that closed without warning would otherwise be collected first
+     * by the next one, pushing every payload header after it out of place
+     * for good: the stream opens black and stays black until replug. */
+    if(need_flush) {
+        need_flush = 0;
+        usbd_ep_flush(0, UVC_IN_EP);
+        busy = 0;
+    }
+    if(!busy) return 1;
+
+    if((uint32_t)(busy_at - tim_get_cnt(TIM0)) > UVC_STALL_TICKS) {
+        /* The abandoned frame must not be left for the next host to
+         * collect: it would arrive before that session's first frame and
+         * push every payload header out of place for good. */
+        usbd_ep_flush(0, UVC_IN_EP);
+        busy = 0;
+        /*
+         * Retry before concluding the host has gone.
+         *
+         * A transfer can be orphaned while the host is still very much
+         * there - it re-opens the stream and clears the endpoint halt,
+         * which resets the data toggle under anything already queued.
+         * Latching the stream off on the first such stall turned a
+         * recoverable hiccup into a camera that stayed blank until
+         * replug. Flushing and trying again costs one frame and fixes
+         * it, so give up only when repeated attempts get nowhere.
+         *
+         * "Nowhere" has to mean no progress, not just elapsed time:
+         * frames_sent advancing between stalls means the host is
+         * reading, however slowly, and is not gone at all.
+         */
+        if(frames_sent != stall_mark) {
+            stall_mark = frames_sent;
+            stall_strikes = 1;
+        } else if(++stall_strikes >= UVC_STALL_STRIKES) {
+            printf("[uvc] host stopped reading, stream idle after %lu frames\r\n",
+                   (unsigned long)frames_sent);
+            streaming = 0;
+            stall_strikes = 0;
+        }
+    }
+    return 0;
+}
+
+/* Put the payload header in front of a finished frame and send it. Every
+ * frame the host receives is a new frame to the host, a repeated one
+ * included, so the frame id toggles on all of them. */
+static void uvc_queue(uint32_t slot_base, uint32_t total) {
+    uint8_t* slot = (uint8_t*)slot_base;
+
+    slot[UVC_HDR_OFF] = UVC_HDR_LEN;
+    slot[UVC_HDR_OFF + 1] = UVC_BM_EOH | UVC_BM_EOF | (fid ? UVC_BM_FID : 0u);
+    fid ^= 1u;
+
+    /* Sent straight out of the ring slot. It cannot be overwritten under us:
+     * the producer needs all 40 slots to come back around, about 1.3 s,
+     * against a transfer measured in tens of milliseconds. */
+    busy = 1;
+    busy_at = tim_get_cnt(TIM0);
+    last_queue_at = busy_at;
+    if(usbd_ep_start_write(0, UVC_IN_EP, slot + UVC_HDR_OFF, total) != 0) {
+        busy = 0;
+        frames_dropped++;
+    }
+}
+
+/*
  * Hand one encoded frame to the host, if it is watching and the last one has
  * gone. Called from the main loop, never the IRQ, so a stalled host costs
  * frames and nothing else - capture keeps running in the 1 kHz tick.
@@ -412,50 +514,13 @@ void usbuvc_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) {
     uint8_t* slot = (uint8_t*)slot_base;
     uint32_t jpeg_len, total;
 
-    if(!streaming) return;
-
-    /* Start each session from a known-empty endpoint. A frame left queued by
-     * a host that closed without warning would otherwise be collected first
-     * by the next one, pushing every payload header after it out of place
-     * for good: the stream opens black and stays black until replug. */
-    if(need_flush) {
-        need_flush = 0;
-        usbd_ep_flush(0, UVC_IN_EP);
-        busy = 0;
+    if(!streaming) {
+        last_valid = 0;
+        return;
     }
+    seen_since++;
 
-    if(busy) {
-        if((uint32_t)(busy_at - tim_get_cnt(TIM0)) > UVC_STALL_TICKS) {
-            /* The abandoned frame must not be left for the next host to
-             * collect: it would arrive before that session's first frame and
-             * push every payload header out of place for good. */
-            usbd_ep_flush(0, UVC_IN_EP);
-            busy = 0;
-            /*
-             * Retry before concluding the host has gone.
-             *
-             * A transfer can be orphaned while the host is still very much
-             * there - it re-opens the stream and clears the endpoint halt,
-             * which resets the data toggle under anything already queued.
-             * Latching the stream off on the first such stall turned a
-             * recoverable hiccup into a camera that stayed blank until
-             * replug. Flushing and trying again costs one frame and fixes
-             * it, so give up only when repeated attempts get nowhere.
-             *
-             * "Nowhere" has to mean no progress, not just elapsed time:
-             * frames_sent advancing between stalls means the host is
-             * reading, however slowly, and is not gone at all.
-             */
-            if(frames_sent != stall_mark) {
-                stall_mark = frames_sent;
-                stall_strikes = 1;
-            } else if(++stall_strikes >= UVC_STALL_STRIKES) {
-                printf("[uvc] host stopped reading, stream idle after %lu frames\r\n",
-                       (unsigned long)frames_sent);
-                streaming = 0;
-                stall_strikes = 0;
-            }
-        }
+    if(!uvc_ready()) {
         frames_dropped++;
         return;
     }
@@ -473,19 +538,29 @@ void usbuvc_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) {
         total++;
     }
 
-    slot[UVC_HDR_OFF] = UVC_HDR_LEN;
-    slot[UVC_HDR_OFF + 1] = UVC_BM_EOH | UVC_BM_EOF | (fid ? UVC_BM_FID : 0u);
-    fid ^= 1u;
+    last_base = slot_base;
+    last_total = total;
+    last_valid = 1;
+    seen_since = 0;
+    uvc_queue(slot_base, total);
+}
 
-    /* Sent straight out of the ring slot. It cannot be overwritten under us:
-     * the producer needs all 40 slots to come back around, about 1.3 s,
-     * against a transfer measured in tens of milliseconds. */
-    busy = 1;
-    busy_at = tim_get_cnt(TIM0);
-    if(usbd_ep_start_write(0, UVC_IN_EP, slot + UVC_HDR_OFF, total) != 0) {
-        busy = 0;
-        frames_dropped++;
+/*
+ * Main-loop poll, for the times no frame arrives to drive the pump: keeps
+ * the stream alive through a signal dropout, and keeps the stall detector
+ * running when nothing else would call it.
+ */
+void usbuvc_poll(void) {
+    if(!streaming || !last_valid) return;
+    if((uint32_t)(last_queue_at - tim_get_cnt(TIM0)) < UVC_KEEPALIVE_TICKS) return;
+    /* A slot this many frames old may already be the producer's again. */
+    if(seen_since >= UVC_KEEPALIVE_MAX_AGE) {
+        last_valid = 0;
+        return;
     }
+    if(!uvc_ready()) return;
+    keepalives++;
+    uvc_queue(last_base, last_total);
 }
 
 void usbuvc_stats(void) {
@@ -493,7 +568,8 @@ void usbuvc_stats(void) {
     if(!streaming) return;
     fps = frames_sent - last_sent;
     last_sent = frames_sent;
-    printf("[uvc] %lu fps, %lu sent, %lu dropped, %lu KB total\r\n",
+    printf("[uvc] %lu fps, %lu sent, %lu dropped, %lu repeated, %lu KB total\r\n",
            (unsigned long)fps, (unsigned long)frames_sent,
-           (unsigned long)frames_dropped, (unsigned long)(bytes_sent / 1024u));
+           (unsigned long)frames_dropped, (unsigned long)keepalives,
+           (unsigned long)(bytes_sent / 1024u));
 }

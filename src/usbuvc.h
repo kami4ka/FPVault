@@ -141,5 +141,11 @@ void usbuvc_hook_notify(struct usbd_interface* vc, struct usbd_interface* vs);
  * immediately unless a host is watching. */
 void usbuvc_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality);
 
+/* Call from the main loop. While a host is streaming and no new frame has
+ * arrived for a tenth of a second, sends the last good one again, so a
+ * signal dropout reaches the host as a still picture rather than as a
+ * stream that has gone quiet. */
+void usbuvc_poll(void);
+
 /* 1 Hz line, silent unless streaming. */
 void usbuvc_stats(void);
