@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#include "dlog.h" /* FPVault: debug-build log, nothing in the normal build */
 #include "usbd_core.h"
 #include "usb_musb_reg.h"
 
@@ -433,6 +434,10 @@ int usbd_ep_close(uint8_t busid, const uint8_t ep)
 
 int usbd_ep_set_stall(uint8_t busid, const uint8_t ep)
 {
+    if (USB_EP_GET_IDX(ep) != 0) {
+        DLOG("usb ep %02x halted", ep);
+    }
+
     uint8_t ep_idx = USB_EP_GET_IDX(ep);
     uint8_t old_ep_idx;
 
@@ -461,6 +466,10 @@ int usbd_ep_set_stall(uint8_t busid, const uint8_t ep)
 
 int usbd_ep_clear_stall(uint8_t busid, const uint8_t ep)
 {
+    if (USB_EP_GET_IDX(ep) != 0) {
+        DLOG("usb ep %02x halt cleared by the host", ep);
+    }
+
     uint8_t ep_idx = USB_EP_GET_IDX(ep);
     uint8_t old_ep_idx;
 
@@ -776,10 +785,15 @@ int usbd_ep_start_read(uint8_t busid, const uint8_t ep, uint8_t *data, uint32_t 
 static void ep0_take_setup(void)
 {
     if (HWREGH(USB_BASE + MUSB_IND_RXCOUNT_OFFSET) != 8) {
+        DLOG("usb ep0: %u bytes where a request was expected, ignored",
+             (unsigned)HWREGH(USB_BASE + MUSB_IND_RXCOUNT_OFFSET));
         return;
     }
 
     musb_read_packet(0, (uint8_t *)&g_musb_udc.setup, 8);
+    DLOG("usb request %02x %02x value %04x index %04x length %u",
+         g_musb_udc.setup.bmRequestType, g_musb_udc.setup.bRequest,
+         g_musb_udc.setup.wValue, g_musb_udc.setup.wIndex, g_musb_udc.setup.wLength);
     if (g_musb_udc.setup.wLength) {
         HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = USB_CSRL0_RXRDYC;
     } else {
@@ -795,13 +809,25 @@ static void handle_ep0(void)
     uint8_t entry_state = usb_ep0_state;
     uint16_t read_count;
 
+#ifdef FPV_DEBUG_LOG
+    /* Not the packets in the middle of a data stage: a firmware update is
+     * fifteen hundred of them and says nothing. Anything out of the
+     * ordinary is logged whatever the stage. */
+    if ((usb_ep0_state != USB_EP0_STATE_IN_DATA && usb_ep0_state != USB_EP0_STATE_OUT_DATA) ||
+        (ep0_status & (USB_CSRL0_STALLED | USB_CSRL0_SETEND | USB_CSRL0_DATAEND))) {
+        DLOG("usb ep0 irq: csr %02x state %u", ep0_status, (unsigned)usb_ep0_state);
+    }
+#endif
+
     if (ep0_status & USB_CSRL0_STALLED) {
+        DLOG("usb ep0: request refused (stall sent), state was %u", (unsigned)usb_ep0_state);
         HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) &= ~USB_CSRL0_STALLED;
         usb_ep0_state = USB_EP0_STATE_SETUP;
         return;
     }
 
     if (ep0_status & USB_CSRL0_SETEND) {
+        DLOG("usb ep0: host ended a request early, state was %u", (unsigned)usb_ep0_state);
         HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = USB_CSRL0_SETENDC;
     }
 

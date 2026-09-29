@@ -143,7 +143,8 @@ tools/release.sh v0.9.5 notes.md ../u-boot/u-boot-sunxi-with-spl.bin \
 It checks the tag against `FW_VERSION_STR` in `src/board.h`, builds the
 firmware, applies the same two checks the board makes before it burns
 anything (size within the 256 KB slot, byte 3 is the `0xEA` branch), checks
-the U-Boot image really carries an `eGON.BT0` header, and attaches both.
+the U-Boot image really carries an `eGON.BT0` header, and attaches the
+normal build, the debug build (below) and U-Boot.
 
 **`--requires-recovery` matters.** It appends a trailer to the notes:
 
@@ -160,6 +161,47 @@ that slot and nothing else.
 It cannot be inferred from the assets. Every release ships a U-Boot image
 whether or not that image changed, and two builds of identical source differ
 anyway because U-Boot stamps its build date in. So the release declares it.
+
+## Debug build — a log on the card
+
+For a board that misbehaves somewhere with no serial console to watch.
+
+```sh
+make debug        # build-debug/fpvault-debug.bin
+make dfu-debug    # build it and install over USB
+```
+
+The same firmware, plus a text log written to the SD card while the board is
+connected to a computer (card reader + camera mode). The banner and the log
+say `0.9.x-debug`. The normal build contains none of this code.
+
+**What is logged.** Only lines sent with `DLOG()` (`src/dlog.h`), not the
+console output: boot and the cause of the previous reset, USB bus events,
+every control request and what endpoint 0 did with it, the camera stream
+starting, stopping and stalling, signal lost and found, capture restarts,
+encoder aborts, and one line of counters every 5 s. Every line starts with
+the uptime in seconds. A gap in the 5 s lines means the main loop stopped.
+
+**How it avoids damaging the card.** In USB mode the computer owns the
+filesystem, so the firmware never touches it then. Before USB starts it
+creates `/FPVLOG.TXT`, 4 MB in one unbroken piece, and notes where that piece
+is. Afterwards it only overwrites those sectors. The file is always 4 MB:
+text first, spaces after.
+
+- Each power-up continues where the last one stopped. When less than a
+  quarter is left, the next power-up clears the file.
+- If the computer deletes the file and reuses its space, logging stops for
+  that session and the next power-up makes a new file.
+- Lines not yet written when the board resets survive in RAM through a warm
+  reset and are written first on the next boot.
+
+**Collecting it.** The computer caches what it has read, so it shows the
+file as it was when the card was mounted. Unplug the board, plug it back in,
+then copy `FPVLOG.TXT` off the card.
+
+`tools/release.sh` builds both and publishes the debug image as
+`fpvault-<tag>-debug.bin`. FPVault Desktop installs only `fpvault-<tag>.bin`;
+the debug image goes on with `dfu-util` or over FEL.
 
 ## M1 — VE first light (go/no-go)
 

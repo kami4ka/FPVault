@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "dlog.h"
 #include "board.h"
 #include "recorder.h"
 #include "avi.h"
@@ -196,6 +197,7 @@ void recorder_task(void) {
             usbmsc_set_ready();
         else
             printf("[rec] USB mode but no card responds\r\n");
+        dlog_activate();
         enter(REC_USB_MODE);
         return;
     }

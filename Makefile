@@ -30,6 +30,18 @@ SRCS += src/main.c src/system.c src/exception.c src/console.c src/capture.c \
         vendor/cherryusb/port/usb_dc_musb.c \
         vendor/fatfs/ff.c vendor/fatfs/ffsystem.c vendor/fatfs/ffunicode.c
 
+# ---- debug build ----------------------------------------------------------
+# make debug  ->  build-debug/fpvault-debug.bin
+# The same firmware plus a text log on the SD card (src/dlog.h). Everything
+# it adds is behind FPV_DEBUG_LOG; the normal build contains none of it.
+# This has to come before the include below, which fixes SRCS for good.
+DEBUG_LOG ?= 0
+ifeq ($(DEBUG_LOG),1)
+PROJECT_NAME = fpvault-debug
+DEFS += -DFPV_DEBUG_LOG
+SRCS += src/dlog.c src/dlog_core.c
+endif
+
 INCLUDES += -Ivendor/fatfs -Ivendor/cherryusb -Ivendor/cherryusb/common \
             -Ivendor/cherryusb/core -Ivendor/cherryusb/class/msc \
             -Ivendor/cherryusb/class/video \
@@ -85,4 +97,11 @@ deploy: $(BIN)
 dfu: $(BIN)
 	dfu-util -d 34b7:f1c2 -a 0 -D $(BIN)
 
-.PHONY: deploy dfu
+# ---- debug build, in its own directory so the two never share objects ------
+debug:
+	$(MAKE) DEBUG_LOG=1 BUILDDIR=build-debug
+
+dfu-debug: debug
+	dfu-util -d 34b7:f1c2 -a 0 -D build-debug/fpvault-debug.bin
+
+.PHONY: deploy dfu debug dfu-debug

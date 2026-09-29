@@ -21,6 +21,9 @@ test_runcam: test_runcam.c ../../src/runcam.c ../../src/runcam.h
 test_jpegtab: test_jpegtab.c ../../src/jpegtab.c ../../src/jpegtab.h
 	$(CC) $(CFLAGS) -o $@ test_jpegtab.c ../../src/jpegtab.c
 
+test_dlog: test_dlog.c ../../src/dlog_core.c ../../src/dlog_core.h
+	$(CC) $(CFLAGS) -o $@ test_dlog.c ../../src/dlog_core.c
+
 clean:
 	rm -f $(TESTS) *.avi
 

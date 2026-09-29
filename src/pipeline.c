@@ -8,6 +8,7 @@
  */
 #include <stdint.h>
 #include <stdio.h>
+#include "dlog.h"
 #include "board.h"
 #include "pipeline.h"
 #include "capture.h"
@@ -106,6 +107,8 @@ void pipeline_tick(void) {
              * stalled engine, its status bits and its write offset were all
              * inherited by the next encode. */
             enc_abort_st = vejpeg_abort();
+            DLOG("enc timed out after 50 ms, aborted, status %lx",
+                 (unsigned long)enc_abort_st);
             enc_busy = 0;
             enc_fails++;
             enc_aborts++;
@@ -190,6 +193,18 @@ int pipeline_last(uint32_t* phys, uint32_t* len) {
     *len = slot_len[(h - 1) % BSRING_SLOTS];
     return 1;
 }
+
+#ifdef FPV_DEBUG_LOG
+void pipeline_dlog(void) {
+    DLOG("pipe in=%lu enc=%lu fails=%lu aborts=%lu restarts=%lu ring_hi=%lu drops=%lu "
+         "tvd=%08lx %s h=%u",
+         (unsigned long)capture_frames(), (unsigned long)enc_frames,
+         (unsigned long)enc_fails, (unsigned long)enc_aborts,
+         (unsigned long)capture_kicks(), (unsigned long)ring_hiwater,
+         (unsigned long)ring_drops, (unsigned long)capture_state(),
+         capture_standard() == VID_PAL ? "PAL" : "NTSC", (unsigned)capture_height());
+}
+#endif
 
 void pipeline_stats(void) {
     static uint32_t last_in = 0, last_enc = 0;

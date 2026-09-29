@@ -23,6 +23,7 @@
  */
 #include <stdint.h>
 #include <stdio.h>
+#include "dlog.h"
 #include "board.h"
 #include "usbd_core.h"
 #include "usbd_video.h"
@@ -97,6 +98,12 @@ static uint32_t last_queue_at = 0;             /* TIM0 when it was */
 static uint32_t seen_since = 0;                /* frames arrived since */
 static uint8_t last_valid = 0;
 static uint32_t keepalives = 0;
+#ifdef FPV_DEBUG_LOG
+static uint32_t ka_run = 0;    /* repeats in the episode now running */
+static uint32_t flush_run = 0; /* frames flushed uncollected, likewise */
+static uint32_t flushes = 0;
+static uint32_t refused = 0; /* frames the endpoint would not take, likewise */
+#endif
 
 /*
  * How long to wait for a transfer before deciding the host has gone.
@@ -127,6 +134,15 @@ static void uvc_in_done(uint8_t busid, uint8_t ep, uint32_t nbytes) {
     bytes_sent += nbytes;
     frames_sent++;
     busy = 0;
+#ifdef FPV_DEBUG_LOG
+    /* Flushing completes the transfer too, with nothing in it. Only bytes
+     * that left say the host is reading. */
+    if(nbytes && flush_run) {
+        DLOG("uvc host is collecting frames again, after %lu went uncollected",
+             (unsigned long)flush_run);
+        flush_run = 0;
+    }
+#endif
 }
 
 static struct usbd_endpoint uvc_in_ep = {
@@ -271,6 +287,9 @@ static int uvc_vs_request(uint8_t busid, struct usb_setup_packet* setup,
                           ((uint32_t)q[20] << 16) | ((uint32_t)q[21] << 24);
             uint32_t pl = (uint32_t)q[22] | ((uint32_t)q[23] << 8) |
                           ((uint32_t)q[24] << 16) | ((uint32_t)q[25] << 24);
+            DLOG("uvc %s asked: fmt %u frame %u interval %lu frame_sz %lu payload %lu",
+                 cs == UVC_VS_COMMIT_CONTROL ? "commit" : "probe", (unsigned)q[2],
+                 (unsigned)q[3], (unsigned long)iv, (unsigned long)fs, (unsigned long)pl);
             printf("[uvc] %s: fmt %u frame %u interval %lu frame_sz %lu payload %lu\r\n",
                    cs == UVC_VS_COMMIT_CONTROL ? "commit" : "probe",
                    (unsigned)q[2], (unsigned)q[3], (unsigned long)iv,
@@ -305,6 +324,9 @@ static void uvc_notify(uint8_t busid, uint8_t event, void* arg) {
         intf = (struct usb_interface_descriptor*)arg;
         printf("[uvc] host selected interface %u alt %u\r\n",
                (unsigned)intf->bInterfaceNumber, (unsigned)intf->bAlternateSetting);
+        DLOG("uvc host selected interface %u alt %u (stream was %s)",
+             (unsigned)intf->bInterfaceNumber, (unsigned)intf->bAlternateSetting,
+             streaming ? "on" : "off");
         /*
          * Selecting the streaming interface starts a session, and it is not
          * always preceded by a commit.
@@ -338,6 +360,10 @@ static void uvc_notify(uint8_t busid, uint8_t event, void* arg) {
             streaming = 1;
         }
     } else if(event == USBD_EVENT_RESET) {
+#ifdef FPV_DEBUG_LOG
+        if(streaming) DLOG("uvc stream ended by a bus reset after %lu frames",
+                           (unsigned long)frames_sent);
+#endif
         streaming = 0;
         busy = 0;
         probe_defaults();
@@ -418,6 +444,9 @@ void usbd_video_open(uint8_t busid, uint8_t intf) {
     stall_strikes = 0;
     streaming = 1;
     printf("[uvc] streaming on\r\n");
+    DLOG("uvc streaming on, advertised %s, capturing %ux%u",
+         capture_standard() == VID_PAL ? "PAL" : "NTSC", (unsigned)CAP_FW,
+         (unsigned)capture_height());
 }
 
 void usbd_video_close(uint8_t busid, uint8_t intf) {
@@ -425,6 +454,7 @@ void usbd_video_close(uint8_t busid, uint8_t intf) {
     (void)intf;
     streaming = 0;
     printf("[uvc] streaming off after %lu frames\r\n", (unsigned long)frames_sent);
+    DLOG("uvc streaming off after %lu frames", (unsigned long)frames_sent);
 }
 
 /*
@@ -450,6 +480,15 @@ static int uvc_ready(void) {
          * push every payload header out of place for good. */
         usbd_ep_flush(0, UVC_IN_EP);
         busy = 0;
+#ifdef FPV_DEBUG_LOG
+        /* Once per episode: a camera nobody has open does this every second
+         * for as long as it is plugged in. */
+        flushes++;
+        if(flush_run++ == 0)
+            DLOG("uvc host is not collecting frames: one waited 1 s and was "
+                 "discarded (sent %lu, %lu KB)", (unsigned long)frames_sent,
+                 (unsigned long)(bytes_sent / 1024u));
+#endif
         /*
          * Retry before concluding the host has gone.
          *
@@ -471,6 +510,8 @@ static int uvc_ready(void) {
         } else if(++stall_strikes >= UVC_STALL_STRIKES) {
             printf("[uvc] host stopped reading, stream idle after %lu frames\r\n",
                    (unsigned long)frames_sent);
+            DLOG("uvc GAVE UP: host collected nothing in three tries, stream off "
+                 "after %lu frames", (unsigned long)frames_sent);
             streaming = 0;
             stall_strikes = 0;
         }
@@ -497,6 +538,16 @@ static void uvc_queue(uint32_t slot_base, uint32_t total) {
     if(usbd_ep_start_write(0, UVC_IN_EP, slot + UVC_HDR_OFF, total) != 0) {
         busy = 0;
         frames_dropped++;
+#ifdef FPV_DEBUG_LOG
+        if(refused++ == 0)
+            DLOG("uvc endpoint would not take a frame (sent %lu): still holding "
+                 "one the host has not collected, or not enabled",
+                 (unsigned long)frames_sent);
+    } else if(refused) {
+        DLOG("uvc endpoint taking frames again after refusing %lu",
+             (unsigned long)refused);
+        refused = 0;
+#endif
     }
 }
 
@@ -538,6 +589,12 @@ void usbuvc_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) {
         total++;
     }
 
+#ifdef FPV_DEBUG_LOG
+    if(ka_run) {
+        DLOG("uvc live video again after %lu repeated frames", (unsigned long)ka_run);
+        ka_run = 0;
+    }
+#endif
     last_base = slot_base;
     last_total = total;
     last_valid = 1;
@@ -559,9 +616,21 @@ void usbuvc_poll(void) {
         return;
     }
     if(!uvc_ready()) return;
+#ifdef FPV_DEBUG_LOG
+    if(ka_run++ == 0) DLOG("uvc no new frame for 100 ms, repeating the last one");
+#endif
     keepalives++;
     uvc_queue(last_base, last_total);
 }
+
+#ifdef FPV_DEBUG_LOG
+void usbuvc_dlog(void) {
+    DLOG("uvc stream=%u busy=%u sent=%lu dropped=%lu repeated=%lu uncollected=%lu kb=%lu",
+         streaming, busy, (unsigned long)frames_sent, (unsigned long)frames_dropped,
+         (unsigned long)keepalives, (unsigned long)flushes,
+         (unsigned long)(bytes_sent / 1024u));
+}
+#endif
 
 void usbuvc_stats(void) {
     uint32_t fps;

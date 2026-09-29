@@ -7,6 +7,7 @@
  */
 #include <stdint.h>
 #include <stdio.h>
+#include "dlog.h"
 #include "board.h"
 #include "capture.h"
 #include "io.h"
@@ -203,8 +204,29 @@ void capture_stop(void) {
 #define WEDGE_TICKS 200u
 #define WEDGE_ESCALATE 3u
 
+/* Signal edges for the log, debounced: a marginal lock can change state
+ * every tick, and a thousand lines a second would bury what they describe.
+ * An edge is logged once the new state has held for 50 ms. */
+static void signal_edges(int ok) {
+#ifdef FPV_DEBUG_LOG
+    static uint8_t logged = 2, run = 0; /* 2: nothing logged yet */
+    if((uint8_t)ok == logged) {
+        run = 0;
+    } else if(++run >= 50u) {
+        logged = (uint8_t)ok;
+        run = 0;
+        DLOG("cap signal %s, tvd=%08lx", ok ? "LOCKED" : "LOST",
+             (unsigned long)tvd_get_state());
+    }
+#else
+    (void)ok;
+#endif
+}
+
 static void ring_watchdog(void) {
-    if(!capture_signal_ok()) {
+    int ok = capture_signal_ok();
+    signal_edges(ok);
+    if(!ok) {
         idle = 0;
         return;
     }
@@ -213,8 +235,12 @@ static void ring_watchdog(void) {
     kicks++;
     if(++kick_streak >= WEDGE_ESCALATE) {
         kick_streak = 0;
+        DLOG("cap no frame for 200 ms with signal locked: decoder reprogrammed "
+             "(restart %lu)", (unsigned long)kicks);
         capture_set_standard(vid_std);
     } else {
+        DLOG("cap no frame for 200 ms with signal locked: ring restarted "
+             "(restart %lu)", (unsigned long)kicks);
         ring_restart();
     }
 }
@@ -295,6 +321,9 @@ void capture_follow_input(void) {
     if(++agree < STD_HYST) return;
     agree = 0;
     std_switches++;
+    DLOG("cap standard switched to %s (switch %lu), tvd=%08lx",
+         want == VID_PAL ? "PAL 720x576" : "NTSC 720x480", (unsigned long)std_switches,
+         (unsigned long)st);
     capture_set_standard(want);
     printf("[cap] input is %s -> %ux%u\r\n", want == VID_PAL ? "PAL" : "NTSC",
            (unsigned)CAP_FW, (unsigned)FH);

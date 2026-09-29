@@ -36,6 +36,14 @@
 #define FW_VERSION_BCD                                                        \
     ((FW_VERSION_MAJOR << 8) | (FW_VERSION_MINOR << 4) | FW_VERSION_PATCH)
 
+/* Appended to the version wherever it is shown, so a debug build can never be
+ * taken for the normal one. */
+#ifdef FPV_DEBUG_LOG
+#define FW_BUILD_KIND "-debug"
+#else
+#define FW_BUILD_KIND ""
+#endif
+
 #define FW_VERSION_STR "0.9.8"
 
 /* ---- DRAM map (64 MB, flat MMU, virt == phys) ---------------------------
@@ -78,6 +86,11 @@
 #define DFU_STAGE_BASE    0x83400000u
 
 #define BREADCRUMB_BASE   0x83800000u
+/* Debug build only: the log's ring of lines not yet on the card. Just above
+ * the breadcrumbs and for the same reason - DRAM keeps its contents through
+ * a watchdog reset, and the lines worth most are the last ones before it.
+ * 32 KB of text plus a 16-byte header. */
+#define DLOG_RING_BASE    0x83801000u
 #define BC_CRASH_MAGIC    0xDEADFA11u
 #define BC_ALIVE_MAGIC    0xA11FE001u
 #define BC_REBOOT_MAGIC   0x5EB0075Eu  /* bc[6]: reset was asked for (console :r, DFU) */

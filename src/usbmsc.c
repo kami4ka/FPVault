@@ -13,6 +13,7 @@
  */
 #include <stdint.h>
 #include <stdio.h>
+#include "dlog.h"
 #include "board.h"
 #include "usbmsc.h"
 #include "usbdfu.h"
@@ -119,6 +120,22 @@ static void usbd_event_handler(uint8_t busid, uint8_t event) {
     switch(event) {
     case USBD_EVENT_CONFIGURED:
         host_present = 1;
+        DLOG("usb configured");
+        break;
+    case USBD_EVENT_RESET:
+        DLOG("usb bus reset");
+        break;
+    case USBD_EVENT_CONNECTED:
+        DLOG("usb connected");
+        break;
+    case USBD_EVENT_DISCONNECTED:
+        DLOG("usb disconnected");
+        break;
+    case USBD_EVENT_SUSPEND:
+        DLOG("usb suspended by the host");
+        break;
+    case USBD_EVENT_RESUME:
+        DLOG("usb resumed");
         break;
     default:
         break;
@@ -154,6 +171,7 @@ int usbd_msc_sector_write(uint8_t busid, uint8_t lun, uint32_t sector,
     (void)busid;
     (void)lun;
     if(!card_ready) return -1;
+    dlog_host_wrote(sector, length / 512);
     if(sdcard_write(disk_card(), buffer, sector, length / 512) != length / 512)
         return -1;
     wr_sectors += length / 512;
@@ -188,6 +206,13 @@ void usbmsc_init(void) {
     printf("[usb] device mode up (MSC + DFU + UVC, %s)\r\n",
            MSC_MAX_MPS == 512 ? "HS" : "FS");
 }
+
+#ifdef FPV_DEBUG_LOG
+void usbmsc_dlog(void) {
+    DLOG("msc host=%u card=%u read=%lu written=%lu sectors", host_present, card_ready,
+         (unsigned long)rd_sectors, (unsigned long)wr_sectors);
+}
+#endif
 
 int usbmsc_host_present(void) {
     return host_present;

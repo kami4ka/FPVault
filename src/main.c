@@ -25,6 +25,7 @@
 #include "usbmsc.h"
 #include "usbuvc.h"
 #include "usbdfu.h"
+#include "dlog.h"
 #include "arm32.h"
 #include "f1c100s_gpio.h"
 #include "f1c100s_intc.h"
@@ -42,6 +43,7 @@ uint32_t sys_uptime_s(void) { return uptime_s; }
  * blocking SD write in the main loop can never cost a captured frame. */
 static void tick_irq(void) {
     tim_clear_irq(TIM1);
+    dlog_tick();
     pipeline_tick();
 }
 
@@ -50,13 +52,34 @@ int main(void) {
     arm32_interrupt_enable();
 
     printf("\r\n[%s %s] up. build %s %s (%s). s state, r reset\r\n",
-           BOARD_NAME, FW_VERSION_STR, __DATE__, __TIME__, GIT_REV);
+           BOARD_NAME, FW_VERSION_STR FW_BUILD_KIND, __DATE__, __TIME__, GIT_REV);
+
+    /* Before anything else is logged: whatever the previous life had not
+     * written yet is still in the ring, and belongs ahead of this boot. */
+    dlog_boot();
+    DLOG("=== boot: %s %s build %s %s (%s) ===", BOARD_NAME,
+         FW_VERSION_STR FW_BUILD_KIND, __DATE__, __TIME__, GIT_REV);
 
     /* Reset-cause breadcrumbs (board.h): DRAM survives warm resets, so the
      * previous life reports how it ended. Crash marks name the faulting
      * pc/lr even when the crash-time UART dump came out as garbage. */
     {
         volatile uint32_t* bc = (volatile uint32_t*)BREADCRUMB_BASE;
+#ifdef FPV_DEBUG_LOG
+        if(bc[0] == BC_CRASH_MAGIC)
+            DLOG("previous reset: CRASH type %lu pc %08lx lr %08lx at uptime %lus",
+                 (unsigned long)bc[3], (unsigned long)bc[1], (unsigned long)bc[2],
+                 (unsigned long)bc[5]);
+        else if(bc[4] == BC_ALIVE_MAGIC && bc[6] == BC_REBOOT_MAGIC)
+            DLOG("previous reset: requested, at uptime %lus", (unsigned long)bc[5]);
+        else if(bc[4] == BC_ALIVE_MAGIC)
+            DLOG("previous reset: WARM with no crash mark, last heartbeat at "
+                 "uptime %lus (hang and watchdog, or a supply dip)",
+                 (unsigned long)bc[5]);
+        else
+            DLOG("previous reset: cold power-on");
+#endif
+
         if(bc[0] == BC_CRASH_MAGIC)
             printf("[boot] previous reset: CRASH type %lu pc %08lx lr %08lx "
                    "at uptime %lus\r\n",
@@ -85,6 +108,7 @@ int main(void) {
     tim_init(TIM0, TIM_MODE_CONT, TIM_SRC_HOSC, TIM_PSC_1);
     tim_set_period(TIM0, 0xFFFFFFFF);
     tim_start(TIM0);
+    dlog_clock_start();
 
     /* M1: Cedar VE bring-up + test-pattern encoder ('j' on the console). */
     enctest_init();
@@ -103,6 +127,9 @@ int main(void) {
      * it (:R manual toggle, :A auto on/off). */
     pipeline_toggle();
     fclink_init();
+    /* Debug build: the log file has to be found or made before USB exists.
+     * Once a host has the card mounted, the filesystem is the host's. */
+    dlog_prepare();
     usbmsc_init();
 
     /* Mode fork: USB is this board's power source, so a host can only be
@@ -117,6 +144,10 @@ int main(void) {
             wdg_feed();
             if(usbmsc_host_present()) break;
         }
+#ifdef FPV_DEBUG_LOG
+        DLOG("mode: %s after %lu ms", usbmsc_host_present() ? "USB host" : "standalone",
+             (unsigned long)((uint32_t)(t0 - tim_get_cnt(TIM0)) / 24000u));
+#endif
     }
 
     {
@@ -134,6 +165,7 @@ int main(void) {
             /* Drain encoded frames to the recorder (may block on SD -
              * the IRQ pipeline keeps capturing regardless). */
             pipeline_consume();
+            dlog_poll();
             usbuvc_poll();
             usbdfu_poll();
 
@@ -153,6 +185,9 @@ int main(void) {
             if((uint32_t)(t_sec - tim_get_cnt(TIM0)) >= TICKS_PER_SEC) {
                 t_sec -= TICKS_PER_SEC;
                 uptime_s++;
+#ifdef FPV_DEBUG_LOG
+                if((uptime_s % 5u) == 0u) dlog_stats();
+#endif
                 pipeline_stats();
                 recorder_stats();
                 fclink_stats();

@@ -67,21 +67,37 @@ git -C "$HERE" diff --quiet HEAD -- src vendor Makefile uboot \
   || die "src/, vendor/, uboot/ or the Makefile differ from HEAD; commit first"
 
 echo "==> building firmware $VERSION from $(git -C "$HERE" rev-parse --short HEAD)"
-rm -rf "$HERE/build"
+rm -rf "$HERE/build" "$HERE/build-debug"
 make -C "$HERE" >/dev/null
+make -C "$HERE" debug >/dev/null
 BIN="$HERE/build/fpvault.bin"
+# The debug build: the same firmware, plus a text log written to the card in
+# USB mode (src/dlog.h). For sending to someone whose board misbehaves where
+# there is no serial console to watch.
+DBG="$HERE/build-debug/fpvault-debug.bin"
 
 # The same two checks the board makes before it burns anything, so a bad
 # image is caught here rather than by every person who downloads it.
-python3 - "$BIN" <<'PY'
-import sys
-b = open(sys.argv[1], 'rb').read()
+#
+# And each build has to be the one its name says. A debug image published as
+# the normal one would write a log file to every card it met; the reverse
+# would send a tester away to collect a log that is never written.
+for image in "$BIN:normal" "$DBG:debug"; do
+python3 - "${image%:*}" "${image##*:}" <<'PY'
+import os, sys
+path, kind = sys.argv[1], sys.argv[2]
+b = open(path, 'rb').read()
 if len(b) > 0x40000:
     sys.exit(f'firmware is {len(b)} bytes, over the 256 KB NOR slot')
 if b[3] != 0xEA:
     sys.exit(f'firmware byte 3 is {b[3]:#x}, not the 0xEA branch the loader expects')
-print(f'    fpvault.bin {len(b)} bytes, load header ok')
+logs = b'FPVLOG.TXT' in b
+if logs != (kind == 'debug'):
+    sys.exit(f'{os.path.basename(path)} is meant to be the {kind} build but '
+             f'{"contains" if logs else "does not contain"} the debug log')
+print(f'    {os.path.basename(path)} {len(b)} bytes, load header ok, {kind} build')
 PY
+done
 
 python3 - "$UBOOT" <<'PY'
 import sys
@@ -112,14 +128,18 @@ fi
 STAGE="$(mktemp -d)"
 trap 'rm -f "$BODY"; rm -rf "$STAGE"' EXIT
 FW_OUT="$STAGE/fpvault-$TAG.bin"
+# The tag comes before "debug" so that the name FPVault Desktop looks for,
+# fpvault-<tag>.bin, can never be this file.
+DBG_OUT="$STAGE/fpvault-$TAG-debug.bin"
 UB_OUT="$STAGE/u-boot-sunxi-with-spl-$TAG.bin"
 cp "$BIN" "$FW_OUT"
+cp "$DBG" "$DBG_OUT"
 cp "$UBOOT" "$UB_OUT"
-echo "==> assets: $(basename "$FW_OUT"), $(basename "$UB_OUT")"
+echo "==> assets: $(basename "$FW_OUT"), $(basename "$DBG_OUT"), $(basename "$UB_OUT")"
 
 echo "==> creating $TAG"
 gh release create "$TAG" \
   --title "$(head -1 "$NOTES" | sed 's/^#* *//')" \
   --notes-file "$BODY" \
   --prerelease \
-  "$FW_OUT" "$UB_OUT"
+  "$FW_OUT" "$DBG_OUT" "$UB_OUT"

@@ -38,6 +38,18 @@ describe('release assets', () => {
     expect(firmwareAsset(a, 'v0.9.8')).toBeUndefined()
   })
 
+  it('never installs the debug build, which logs to the card', () => {
+    const a = named(
+      'fpvault-v0.9.9-debug.bin',
+      'fpvault-v0.9.9.bin',
+      'u-boot-sunxi-with-spl-v0.9.9.bin'
+    )
+    expect(firmwareAsset(a, 'v0.9.9')?.name).toBe('fpvault-v0.9.9.bin')
+    // Nor as a fallback, in a release that somehow has nothing else.
+    expect(firmwareAsset(named('fpvault-v0.9.9-debug.bin'), 'v0.9.9')).toBeUndefined()
+    expect(firmwareAsset(named('fpvault-debug.bin'), 'v0.9.9')).toBeUndefined()
+  })
+
   it('reports a release with no images as having none', () => {
     expect(firmwareAsset([], 'v0.9.8')).toBeUndefined()
     expect(ubootAsset(named('notes.txt'), 'v0.9.8')).toBeUndefined()
