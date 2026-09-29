@@ -698,11 +698,19 @@ int usbd_ep_start_write(uint8_t busid, const uint8_t ep, const uint8_t *data, ui
     if (data_len == 0) {
         if (ep_idx == 0x00) {
             if (g_musb_udc.setup.wLength == 0) {
+                /* FPVault: nothing to send. A request without data had its
+                 * end marked when it was read, and the controller answers
+                 * the status stage by itself - usually before the request
+                 * handler has even returned. Arming an empty packet here
+                 * as well left it, and the end-of-data flag, standing in
+                 * the endpoint with nothing to collect them: the next
+                 * request began with both already set, and when that
+                 * request carried data the controller could refuse it. */
                 usb_ep0_state = USB_EP0_STATE_IN_STATUS;
             } else {
                 usb_ep0_state = USB_EP0_STATE_IN_ZLP;
+                HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = (USB_CSRL0_TXRDY | USB_CSRL0_DATAEND);
             }
-            HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = (USB_CSRL0_TXRDY | USB_CSRL0_DATAEND);
         } else {
             HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = USB_TXCSRL1_TXRDY;
             HWREGH(USB_BASE + MUSB_TXIE_OFFSET) |= (1 << ep_idx);
@@ -765,9 +773,26 @@ int usbd_ep_start_read(uint8_t busid, const uint8_t ep, uint8_t *data, uint32_t 
     return 0;
 }
 
+static void ep0_take_setup(void)
+{
+    if (HWREGH(USB_BASE + MUSB_IND_RXCOUNT_OFFSET) != 8) {
+        return;
+    }
+
+    musb_read_packet(0, (uint8_t *)&g_musb_udc.setup, 8);
+    if (g_musb_udc.setup.wLength) {
+        HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = USB_CSRL0_RXRDYC;
+    } else {
+        HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = (USB_CSRL0_RXRDYC | USB_CSRL0_DATAEND);
+    }
+
+    usbd_event_ep0_setup_complete_handler(0, (uint8_t *)&g_musb_udc.setup);
+}
+
 static void handle_ep0(void)
 {
     uint8_t ep0_status = HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET);
+    uint8_t entry_state = usb_ep0_state;
     uint16_t read_count;
 
     if (ep0_status & USB_CSRL0_STALLED) {
@@ -788,20 +813,7 @@ static void handle_ep0(void)
     switch (usb_ep0_state) {
         case USB_EP0_STATE_SETUP:
             if (ep0_status & USB_CSRL0_RXRDY) {
-                read_count = HWREGH(USB_BASE + MUSB_IND_RXCOUNT_OFFSET);
-
-                if (read_count != 8) {
-                    return;
-                }
-
-                musb_read_packet(0, (uint8_t *)&g_musb_udc.setup, 8);
-                if (g_musb_udc.setup.wLength) {
-                    HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = USB_CSRL0_RXRDYC;
-                } else {
-                    HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = (USB_CSRL0_RXRDYC | USB_CSRL0_DATAEND);
-                }
-
-                usbd_event_ep0_setup_complete_handler(0, (uint8_t *)&g_musb_udc.setup);
+                ep0_take_setup();
             }
             break;
 
@@ -844,6 +856,22 @@ static void handle_ep0(void)
             usb_ep0_state = USB_EP0_STATE_SETUP;
             usbd_event_ep_in_complete_handler(0, 0x80, 0);
             break;
+    }
+
+    /* FPVault: one interrupt can carry two events. The controller finishes
+     * a request's last stage by itself and accepts the next SETUP straight
+     * away, so whenever this handler runs late the end of one request and
+     * the start of the next arrive together. Handling only the first left
+     * the SETUP sitting in the FIFO with no further interrupt to announce
+     * it, and the host waited out its five-second timeout.
+     *
+     * Seen with the debug build, which holds this interrupt off for the
+     * length of a card write: the camera's probe was never followed by a
+     * commit. Card reads for mass storage are served inside this interrupt
+     * and delay it the same way. */
+    if (entry_state != USB_EP0_STATE_SETUP && usb_ep0_state == USB_EP0_STATE_SETUP &&
+        (HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) & USB_CSRL0_RXRDY)) {
+        ep0_take_setup();
     }
 }
 
