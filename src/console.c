@@ -102,6 +102,12 @@ static void dispatch(char c) {
     case '6':
     case '7': enctest_set_fmt((uint8_t)(c - '0')); break;
     case 'v': enctest_info(); break;
+    case 'Q':
+        capture_bench_fake_pal(!capture_bench_is_fake_pal());
+        printf("[cap] bench: PAL emulation %s (reports %ux%u)\r\n",
+               capture_bench_is_fake_pal() ? "ON" : "off", (unsigned)CAP_FW,
+               (unsigned)capture_height());
+        break;
     case 'P':
         /* Bench: flip the capture standard once, the way a disturbed signal
          * can make auto-follow do. Auto-follow puts it back by itself about

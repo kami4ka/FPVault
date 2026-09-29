@@ -89,7 +89,12 @@ void pipeline_tick(void) {
      * good frame, which is what a camera shutter closing should look like,
      * and the recorder already accounts a dropout by time rather than by
      * the frames that arrive during it. */
-    if(capture_tick()) enc_pending = capture_signal_ok() ? capture_prev() : -1;
+    if(capture_tick()) {
+        static uint32_t bench_n = 0;
+        enc_pending = capture_signal_ok() ? capture_prev() : -1;
+        /* Bench PAL: five frames in six, 29.97 -> 24.98 fps. */
+        if(capture_bench_is_fake_pal() && (++bench_n % 6u) == 0u) enc_pending = -1;
+    }
 
     if(enc_busy) {
         int32_t r = vejpeg_poll_done();

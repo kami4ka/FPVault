@@ -63,6 +63,11 @@ uint32_t capture_state(void); /* raw TVD_STATE_0 */
 int capture_signal_ok(void);  /* V_LOCK present, NO_SIGNAL absent */
 uint32_t capture_frames(void);
 uint32_t capture_std_switches(void);
+
+/* Bench only: make the firmware behave as if a PAL camera were connected,
+ * without one. See capture.c. */
+void capture_bench_fake_pal(int on);
+int capture_bench_is_fake_pal(void);
 /* Times the ring was restarted because a locked signal completed no frame
  * for 200 ms - see the watchdog in capture.c. Zero in a healthy run; one per
  * signal dropout that landed in the wrong part of a frame. */

@@ -330,11 +330,26 @@ void capture_follow_input(void) {
 }
 
 /* ---- state --------------------------------------------------------------- */
+/* Bench: present a PAL camera to the rest of the firmware while the decoder
+ * stays on whatever is really connected. Everything downstream of capture -
+ * encoder geometry, JPEG headers, USB negotiation - then behaves as it does
+ * with a 625-line source, which is how a PAL fault can be studied on a bench
+ * that only has an NTSC camera. The picture's bottom 96 lines are whatever
+ * was in memory; it is the format that is under test, not the image. */
+static uint8_t fake_pal = 0;
+
+void capture_bench_fake_pal(int on) {
+    fake_pal = (uint8_t)(on != 0);
+}
+int capture_bench_is_fake_pal(void) {
+    return fake_pal;
+}
+
 vid_std_e capture_standard(void) {
-    return vid_std;
+    return fake_pal ? VID_PAL : vid_std;
 }
 uint16_t capture_height(void) {
-    return FH;
+    return fake_pal ? 576u : FH;
 }
 cap_fmt_e capture_fmt(void) {
     return fmt;
