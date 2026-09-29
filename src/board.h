@@ -31,12 +31,12 @@
  */
 #define FW_VERSION_MAJOR 0
 #define FW_VERSION_MINOR 9
-#define FW_VERSION_PATCH 5
+#define FW_VERSION_PATCH 7
 
 #define FW_VERSION_BCD                                                        \
     ((FW_VERSION_MAJOR << 8) | (FW_VERSION_MINOR << 4) | FW_VERSION_PATCH)
 
-#define FW_VERSION_STR "0.9.6"
+#define FW_VERSION_STR "0.9.7"
 
 /* ---- DRAM map (64 MB, flat MMU, virt == phys) ---------------------------
  *

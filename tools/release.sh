@@ -50,6 +50,14 @@ VERSION="$(sed -n 's/^#define FW_VERSION_STR "\(.*\)"$/\1/p' "$HERE/src/board.h"
 [ -n "$VERSION" ] || die "could not read FW_VERSION_STR from src/board.h"
 [ "$TAG" = "v$VERSION" ] || die "tag $TAG does not match src/board.h version $VERSION"
 
+# board.h states the version twice: the string the banner prints, and the
+# three numbers that become bcdDevice, which is what the board reports over
+# USB and what FPVault Desktop reads. v0.9.6 shipped with only the string
+# bumped, so it announced itself as 0.9.5 to every host that asked.
+num() { sed -n "s/^#define FW_VERSION_$1 \\([0-9]*\\)$/\\1/p" "$HERE/src/board.h"; }
+NUMERIC="$(num MAJOR).$(num MINOR).$(num PATCH)"
+[ "$NUMERIC" = "$VERSION" ] || die "FW_VERSION_MAJOR/MINOR/PATCH say $NUMERIC but FW_VERSION_STR says $VERSION"
+
 echo "==> building firmware $VERSION"
 make -C "$HERE" >/dev/null
 BIN="$HERE/build/fpvault.bin"
