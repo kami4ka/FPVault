@@ -782,6 +782,10 @@ int usbd_ep_start_read(uint8_t busid, const uint8_t ep, uint8_t *data, uint32_t 
     return 0;
 }
 
+#ifdef FPV_DEBUG_LOG
+uint32_t musb_dlog_requests = 0; /* control requests, ever */
+#endif
+
 static void ep0_take_setup(void)
 {
     if (HWREGH(USB_BASE + MUSB_IND_RXCOUNT_OFFSET) != 8) {
@@ -791,9 +795,29 @@ static void ep0_take_setup(void)
     }
 
     musb_read_packet(0, (uint8_t *)&g_musb_udc.setup, 8);
-    DLOG("usb request %02x %02x value %04x index %04x length %u",
-         g_musb_udc.setup.bmRequestType, g_musb_udc.setup.bRequest,
-         g_musb_udc.setup.wValue, g_musb_udc.setup.wIndex, g_musb_udc.setup.wLength);
+#ifdef FPV_DEBUG_LOG
+    {
+        /* A host that polls the same request over and over would fill the
+         * log with one line: repeats are counted and reported once the
+         * request changes. Every request still counts towards the
+         * per-second line. */
+        static struct usb_setup_packet prev;
+        static uint32_t repeats = 0;
+        musb_dlog_requests++;
+        if (memcmp(&prev, &g_musb_udc.setup, 8) == 0) {
+            repeats++;
+        } else {
+            if (repeats) {
+                DLOG("usb (the request before was repeated %lu more times)", (unsigned long)repeats);
+                repeats = 0;
+            }
+            memcpy(&prev, &g_musb_udc.setup, 8);
+            DLOG("usb request %02x %02x value %04x index %04x length %u",
+                 g_musb_udc.setup.bmRequestType, g_musb_udc.setup.bRequest,
+                 g_musb_udc.setup.wValue, g_musb_udc.setup.wIndex, g_musb_udc.setup.wLength);
+        }
+    }
+#endif
     if (g_musb_udc.setup.wLength) {
         HWREGB(USB_BASE + MUSB_IND_TXCSRL_OFFSET) = USB_CSRL0_RXRDYC;
     } else {
@@ -810,12 +834,13 @@ static void handle_ep0(void)
     uint16_t read_count;
 
 #ifdef FPV_DEBUG_LOG
-    /* Not the packets in the middle of a data stage: a firmware update is
-     * fifteen hundred of them and says nothing. Anything out of the
-     * ordinary is logged whatever the stage. */
-    if ((usb_ep0_state != USB_EP0_STATE_IN_DATA && usb_ep0_state != USB_EP0_STATE_OUT_DATA) ||
-        (ep0_status & (USB_CSRL0_STALLED | USB_CSRL0_SETEND | USB_CSRL0_DATAEND))) {
-        DLOG("usb ep0 irq: csr %02x state %u", ep0_status, (unsigned)usb_ep0_state);
+    /* Only what is out of the ordinary: a packet or an end-of-data flag
+     * still standing when the controller says a stage is over. That pair
+     * was the signature of the refused-probe bug; a healthy request never
+     * shows either. Stalls and early ends are logged below. */
+    if (ep0_status & (USB_CSRL0_TXRDY | USB_CSRL0_DATAEND)) {
+        DLOG("usb ep0 irq with csr %02x in state %u: a stage did not finish cleanly",
+             ep0_status, (unsigned)usb_ep0_state);
     }
 #endif
 

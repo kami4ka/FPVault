@@ -25,6 +25,7 @@
 #include "usbd_msc.h"
 #include "sdcard.h"
 #include "f1c100s_intc.h"
+#include "f1c100s_timer.h"
 
 #define USBD_BASE 0x01c13000UL
 #define USB_IRQ 26
@@ -155,25 +156,75 @@ void usbd_msc_get_cap(uint8_t busid, uint8_t lun, uint32_t* block_num,
            (unsigned long)disk_card()->blk_cnt, card_ready);
 }
 
+#ifdef FPV_DEBUG_LOG
+/*
+ * Card commands are served inside the USB interrupt, so for as long as one
+ * takes, the camera's transfers and every control request wait. A computer
+ * that reads the card hard - indexing it, scanning it, making thumbnails of
+ * the clips - is therefore a way for the picture to stall, and these are
+ * the numbers that would show it.
+ */
+static uint32_t op_max_ticks = 0;
+static uint32_t slow_logged_at = 0;
+
+void usbmsc_dlog_counts(uint32_t* rd, uint32_t* wr, uint32_t* op_max_ms) {
+    *rd = rd_sectors;
+    *wr = wr_sectors;
+    *op_max_ms = op_max_ticks / (TICKS_PER_SEC / 1000u);
+    op_max_ticks = 0;
+}
+
+static void card_op_done(const char* what, uint32_t sector, uint32_t count, uint32_t t0,
+                         int ok) {
+    uint32_t dt = (uint32_t)(t0 - tim_get_cnt(TIM0));
+    uint32_t now = dlog_now_ms();
+    if(dt > op_max_ticks) op_max_ticks = dt;
+    if(!ok) {
+        DLOG("msc card %s FAILED: sector %lu, %lu sectors", what, (unsigned long)sector,
+             (unsigned long)count);
+    } else if(dt >= TICKS_PER_SEC / 5u && now - slow_logged_at >= 1000u) {
+        /* At most one a second: a slow card makes many of these. */
+        slow_logged_at = now;
+        DLOG("msc card %s of %lu sectors at %lu took %lu ms, USB waited meanwhile", what,
+             (unsigned long)count, (unsigned long)sector,
+             (unsigned long)(dt / (TICKS_PER_SEC / 1000u)));
+    }
+}
+#endif
+
 int usbd_msc_sector_read(uint8_t busid, uint8_t lun, uint32_t sector,
                          uint8_t* buffer, uint32_t length) {
+    int ok;
+#ifdef FPV_DEBUG_LOG
+    uint32_t t0 = tim_get_cnt(TIM0);
+#endif
     (void)busid;
     (void)lun;
     if(!card_ready) return -1;
-    if(sdcard_read(disk_card(), buffer, sector, length / 512) != length / 512)
-        return -1;
+    ok = sdcard_read(disk_card(), buffer, sector, length / 512) == length / 512;
+#ifdef FPV_DEBUG_LOG
+    card_op_done("read", sector, length / 512, t0, ok);
+#endif
+    if(!ok) return -1;
     rd_sectors += length / 512;
     return 0;
 }
 
 int usbd_msc_sector_write(uint8_t busid, uint8_t lun, uint32_t sector,
                           uint8_t* buffer, uint32_t length) {
+    int ok;
+#ifdef FPV_DEBUG_LOG
+    uint32_t t0 = tim_get_cnt(TIM0);
+#endif
     (void)busid;
     (void)lun;
     if(!card_ready) return -1;
     dlog_host_wrote(sector, length / 512);
-    if(sdcard_write(disk_card(), buffer, sector, length / 512) != length / 512)
-        return -1;
+    ok = sdcard_write(disk_card(), buffer, sector, length / 512) == length / 512;
+#ifdef FPV_DEBUG_LOG
+    card_op_done("write", sector, length / 512, t0, ok);
+#endif
+    if(!ok) return -1;
     wr_sectors += length / 512;
     return 0;
 }

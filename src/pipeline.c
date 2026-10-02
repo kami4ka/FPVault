@@ -32,6 +32,9 @@ static volatile uint8_t frozen = 0;
 static int enc_pending = -1;
 static uint32_t enc_start_t;
 static uint32_t follow_div = 0;
+#ifdef FPV_DEBUG_LOG
+static uint32_t fail_run = 0, drop_run = 0; /* episodes, for the log */
+#endif
 
 /* stats */
 static volatile uint32_t enc_frames = 0, enc_fails = 0, ring_drops = 0;
@@ -106,9 +109,18 @@ void pipeline_tick(void) {
             head++; /* publish AFTER the length */
             enc_busy = 0;
             enc_frames++;
+#ifdef FPV_DEBUG_LOG
+            if(fail_run) {
+                DLOG("enc working again after %lu failed frames", (unsigned long)fail_run);
+                fail_run = 0;
+            }
+#endif
         } else if(r == VEJPEG_ERR_FAILED) {
             enc_busy = 0;
             enc_fails++;
+#ifdef FPV_DEBUG_LOG
+            if(fail_run++ == 0) DLOG("enc FAILED: the engine reported an error, frame lost");
+#endif
         } else if((uint32_t)(enc_start_t - tim_get_cnt(TIM0)) / 24u > 50000u) {
             /* Walking away from an encode is only safe if nothing of it is
              * left behind. This used to clear enc_busy and no more, so a
@@ -131,7 +143,18 @@ void pipeline_tick(void) {
             /* ring full: drop at the cheapest point - skip the encode */
             ring_drops++;
             enc_pending = -1;
+#ifdef FPV_DEBUG_LOG
+            if(drop_run++ == 0)
+                DLOG("pipe ring full: frames not encoded, the main loop is behind");
+#endif
         } else {
+#ifdef FPV_DEBUG_LOG
+            if(drop_run) {
+                DLOG("pipe ring has room again after %lu frames skipped",
+                     (unsigned long)drop_run);
+                drop_run = 0;
+            }
+#endif
             /*
              * What is encoded is what the consumer was promised.
              *
@@ -232,6 +255,10 @@ int pipeline_last(uint32_t* phys, uint32_t* len) {
 }
 
 #ifdef FPV_DEBUG_LOG
+uint32_t pipeline_enc_count(void) {
+    return enc_frames;
+}
+
 void pipeline_dlog(void) {
     DLOG("pipe in=%lu enc=%lu fails=%lu aborts=%lu restarts=%lu ring_hi=%lu drops=%lu "
          "tvd=%08lx %s h=%u",

@@ -168,7 +168,35 @@ int main(void) {
     {
         dlog_t e;
         dlog_core_open(&e, &ring, &io, LBA0, NSEC, 0);
-        CHECK("resumes at the start of the next one", e.sec == 1 && e.fill == 0);
+        /* 512 x's and no line ending: the line was cut there. */
+        CHECK("resumes in the next one, ending the cut line first",
+              e.sec == 1 && e.fill == 2 && e.cur[0] == '\r' && e.cur[1] == '\n');
+    }
+
+    /* ---- a line cut off by a power-off ---- */
+    fresh();
+    memcpy(ring.data, "      9.999 usb r", 17); /* the rest never reached the card */
+    ring.head = 17;
+    dlog_core_flush(&d, 1, 8);
+    {
+        dlog_t e;
+        memset(&ring, 0, sizeof ring); /* power-off: RAM gone */
+        dlog_ring_recover(&ring);
+        dlog_core_open(&e, &ring, &io, LBA0, NSEC, 0);
+        e.active = 1;
+        put("boot");
+        dlog_core_flush(&e, 1, 8);
+        CHECK("the next session starts on a line of its own",
+              memcmp(sec(0), "      9.999 usb r\r\n      1.234 boot\r\n", 37) == 0);
+    }
+    /* ...and a clean ending gets nothing added. */
+    fresh();
+    put("whole line");
+    dlog_core_flush(&d, 1, 8);
+    {
+        dlog_t e;
+        dlog_core_open(&e, &ring, &io, LBA0, NSEC, 0);
+        CHECK("a line that ended properly is left alone", e.fill == 24 && e.dirty == 0);
     }
 
     /* ---- a nearly full file is cleared at power-up ---- */

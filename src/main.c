@@ -204,7 +204,7 @@ int main(void) {
                 t_sec -= TICKS_PER_SEC;
                 uptime_s++;
 #ifdef FPV_DEBUG_LOG
-                if((uptime_s % 5u) == 0u) dlog_stats();
+                dlog_second(uptime_s);
 #endif
                 pipeline_stats();
                 recorder_stats();

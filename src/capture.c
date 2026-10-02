@@ -226,9 +226,21 @@ void capture_stop(void) {
 /* Signal edges for the log, debounced: a marginal lock can change state
  * every tick, and a thousand lines a second would bury what they describe.
  * An edge is logged once the new state has held for 50 ms. */
+#ifdef FPV_DEBUG_LOG
+/* Every millisecond without lock, counted whether or not it lasted long
+ * enough to be logged as an edge: a shutter blink of 20 ms shows up in the
+ * per-second line even though no LOST line is written for it. */
+static volatile uint32_t unlocked_ms = 0;
+
+uint32_t capture_unlocked_ms(void) {
+    return unlocked_ms;
+}
+#endif
+
 static void signal_edges(int ok) {
 #ifdef FPV_DEBUG_LOG
     static uint8_t logged = 2, run = 0; /* 2: nothing logged yet */
+    if(!ok) unlocked_ms++;
     if((uint8_t)ok == logged) {
         run = 0;
     } else if(++run >= 50u) {

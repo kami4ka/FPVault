@@ -68,6 +68,7 @@ cap_fmt_e capture_fmt(void);
 uint32_t capture_state(void); /* raw TVD_STATE_0 */
 int capture_signal_ok(void);  /* V_LOCK present, NO_SIGNAL absent */
 uint32_t capture_frames(void);
+uint32_t capture_unlocked_ms(void); /* debug build: ms without lock, ever */
 uint32_t capture_std_switches(void);
 
 /* Bench only: make the firmware behave as if a PAL camera were connected,

@@ -43,6 +43,9 @@ void dlog_poll(void);     /* main loop */
 void dlog_host_wrote(uint32_t sector, uint32_t count);
 /* Seconds since the last stats line was due; main() paces them with it. */
 void dlog_stats(void);
+void dlog_second(uint32_t uptime_s); /* main loop, once a second */
+uint32_t dlog_now_ms(void);          /* the log's own clock */
+uint32_t dlog_hold_max_ms(void);     /* longest the log kept USB waiting, since last asked */
 
 #else
 

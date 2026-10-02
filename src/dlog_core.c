@@ -77,7 +77,7 @@ static int wipe(dlog_t* d, uint32_t from, uint32_t count) {
 
 /* Content always runs from the first sector without a gap, so the first
  * sector that is nothing but padding is found by bisection. */
-static int locate(dlog_t* d) {
+static int locate(dlog_t* d, int* cut) {
     uint32_t lo = 0, hi = d->nsec;
     while(lo < hi) {
         uint32_t mid = lo + (hi - lo) / 2u;
@@ -89,11 +89,15 @@ static int locate(dlog_t* d) {
     }
     d->sec = lo;
     d->fill = 0;
+    *cut = 0;
     if(lo > 0) {
         uint32_t i = DLOG_SECTOR;
         if(d->io.rd(d->io.ctx, d->lba0 + lo - 1u, d->cur, 1) != 0) return -1;
         while(i > 0 && d->cur[i - 1u] == DLOG_PAD)
             i--;
+        /* Text that stops without a line ending: the rest of that line was
+         * still in RAM when the power went. */
+        *cut = (i > 0 && d->cur[i - 1u] != '\n');
         if(i < DLOG_SECTOR) { /* the last sector used still has room */
             d->sec = lo - 1u;
             d->fill = i;
@@ -104,6 +108,7 @@ static int locate(dlog_t* d) {
 
 int dlog_core_open(dlog_t* d, dlog_ring_t* ring, const dlog_io_t* io, uint32_t lba0,
                    uint32_t nsec, int fresh) {
+    int cut = 0;
     memset(d, 0, sizeof *d);
     d->ring = ring;
     d->io = *io;
@@ -114,7 +119,7 @@ int dlog_core_open(dlog_t* d, dlog_ring_t* ring, const dlog_io_t* io, uint32_t l
     if(fresh) {
         if(wipe(d, 0, nsec) != 0) return -1;
     } else {
-        if(locate(d) != 0) return -1;
+        if(locate(d, &cut) != 0) return -1;
         if(d->nsec - d->sec < d->nsec / 4u) {
             /* Only what was used needs clearing; the rest is padding. */
             uint32_t used = d->sec + (d->fill ? 1u : 0u);
@@ -122,9 +127,16 @@ int dlog_core_open(dlog_t* d, dlog_ring_t* ring, const dlog_io_t* io, uint32_t l
             if(wipe(d, 0, used) != 0) return -1;
             d->sec = 0;
             d->fill = 0;
+            cut = 0;
         }
     }
     if(d->fill == 0) memset(d->cur, DLOG_PAD, DLOG_SECTOR);
+    /* End the cut line, or this session's first line is glued to it. */
+    if(cut) {
+        if(d->fill + 2u <= DLOG_SECTOR) d->cur[d->fill++] = '\r';
+        d->cur[d->fill++] = '\n';
+        d->dirty = 1;
+    }
     d->ready = 1;
     return 0;
 }

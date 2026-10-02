@@ -26,6 +26,7 @@ extern void sdtest_unmount(void);
 extern void pipeline_dlog(void);
 extern void usbuvc_dlog(void);
 extern void usbmsc_dlog(void);
+extern void usbuvc_dlog_rate(void);
 
 #define RING ((dlog_ring_t*)DLOG_RING_BASE)
 
@@ -112,6 +113,14 @@ void dlog_tick(void) {
     clock_sample();
 }
 
+uint32_t dlog_now_ms(void) {
+    uint32_t flags = irq_save(), t;
+    clock_sample();
+    t = ms;
+    irq_restore(flags);
+    return t;
+}
+
 void dlog_clock_start(void) {
     uint32_t flags = irq_save();
     clk_last = tim_get_cnt(TIM0);
@@ -136,8 +145,19 @@ static int io_rd(void* ctx, uint32_t lba, uint8_t* buf, uint32_t n) {
     return got == n ? 0 : -1;
 }
 
+/* The longest the log has held the USB interrupt off, for the per-second
+ * line: the log is not free, and its cost has to be visible in itself. */
+static uint32_t hold_max_ticks = 0;
+
+uint32_t dlog_hold_max_ms(void) {
+    uint32_t m = hold_max_ticks / (TICKS_PER_SEC / 1000u);
+    hold_max_ticks = 0;
+    return m;
+}
+
 static int io_wr(void* ctx, uint32_t lba, const uint8_t* buf, uint32_t n) {
     uint64_t put = 0;
+    uint32_t t0, held;
     (void)ctx;
     if(!usb_up) {
         /* Preparing the file, before the main loop exists to feed the
@@ -145,11 +165,14 @@ static int io_wr(void* ctx, uint32_t lba, const uint8_t* buf, uint32_t n) {
         wdg_feed();
         return sdcard_write(disk_card(), (uint8_t*)buf, lba, n) == n ? 0 : -1;
     }
+    t0 = tim_get_cnt(TIM0);
     intc_disable_irq(IRQ_USBOTG);
     /* Looked at with the host kept out: had it just claimed this space, a
      * write decided on a moment ago would land in its new file. */
     if(!d.abandoned) put = sdcard_write(disk_card(), (uint8_t*)buf, lba, n);
     intc_enable_irq(IRQ_USBOTG);
+    held = (uint32_t)(t0 - tim_get_cnt(TIM0));
+    if(held > hold_max_ticks) hold_max_ticks = held;
     return put == n ? 0 : -1;
 }
 
@@ -258,6 +281,15 @@ void dlog_stats(void) {
     DLOG("log sector=%lu/%lu errors=%lu%s%s", (unsigned long)d.sec,
          (unsigned long)d.nsec, (unsigned long)d.wr_err, d.full ? " FULL" : "",
          d.abandoned ? " ABANDONED" : "");
+}
+
+/* Once a second. While the camera streams, one line of what happened in that
+ * second - enough to see which side stopped first when a picture freezes.
+ * The counters behind it run whether or not it is printed, so the first
+ * line of a stream covers one second and not everything since boot. */
+void dlog_second(uint32_t uptime_s) {
+    usbuvc_dlog_rate();
+    if((uptime_s % 5u) == 0u) dlog_stats();
 }
 
 void dlog_poll(void) {

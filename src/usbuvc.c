@@ -23,6 +23,7 @@
  */
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "dlog.h"
 #include "board.h"
 #include "usbd_core.h"
@@ -31,6 +32,7 @@
 #include "pipeline.h"
 #include "f1c100s_timer.h"
 #include "capture.h"
+#include "usbmsc.h"
 
 /* Added to the MUSB port: discard a queued, uncollected transfer. */
 extern void usbd_ep_flush(uint8_t busid, const uint8_t ep);
@@ -103,6 +105,24 @@ static uint32_t ka_run = 0;    /* repeats in the episode now running */
 static uint32_t flush_run = 0; /* frames flushed uncollected, likewise */
 static uint32_t flushes = 0;
 static uint32_t refused = 0; /* frames the endpoint would not take, likewise */
+/* frames_sent counts every completed transfer, and a flush completes one
+ * with nothing in it. These count only what the host actually took. */
+static uint32_t delivered = 0;
+static uint32_t delivered_at_ms = 0; /* dlog clock, last frame taken */
+static uint32_t queued = 0, wrong_height = 0, wrong_run = 0;
+static uint32_t refused_total = 0;
+static uint32_t frame_max = 0; /* largest frame queued since last line */
+extern uint32_t musb_dlog_requests;
+
+/* How long since the host last took a frame, for the lines that mark a
+ * host deciding something: "it reopened" means much more next to "and it
+ * had taken nothing for 9 s". Into the caller's buffer: this is called from
+ * the USB interrupt as well as the main loop. */
+static const char* taken_ago(char* b, uint32_t size) {
+    if(!delivered) return "never";
+    snprintf(b, size, "%lu ms ago", (unsigned long)(dlog_now_ms() - delivered_at_ms));
+    return b;
+}
 #endif
 
 /*
@@ -135,6 +155,10 @@ static void uvc_in_done(uint8_t busid, uint8_t ep, uint32_t nbytes) {
     frames_sent++;
     busy = 0;
 #ifdef FPV_DEBUG_LOG
+    if(nbytes) {
+        delivered++;
+        delivered_at_ms = dlog_now_ms();
+    }
     /* Flushing completes the transfer too, with nothing in it. Only bytes
      * that left say the host is reading. */
     if(nbytes && flush_run) {
@@ -253,6 +277,8 @@ static int uvc_vs_request(uint8_t busid, struct usb_setup_packet* setup,
 
     (void)busid;
     if(cs != UVC_VS_PROBE_CONTROL && cs != UVC_VS_COMMIT_CONTROL) {
+        DLOG("uvc host asked for stream control %02x (request %02x), not supported: refused",
+             (unsigned)cs, (unsigned)setup->bRequest);
         printf("[uvc] unknown control selector %02x, stalling\r\n", (unsigned)cs);
         return -1;
     }
@@ -329,9 +355,15 @@ static void uvc_notify(uint8_t busid, uint8_t event, void* arg) {
         intf = (struct usb_interface_descriptor*)arg;
         printf("[uvc] host selected interface %u alt %u\r\n",
                (unsigned)intf->bInterfaceNumber, (unsigned)intf->bAlternateSetting);
-        DLOG("uvc host selected interface %u alt %u (stream was %s)",
-             (unsigned)intf->bInterfaceNumber, (unsigned)intf->bAlternateSetting,
-             streaming ? "on" : "off");
+#ifdef FPV_DEBUG_LOG
+        {
+            char ago[24];
+            DLOG("uvc host selected interface %u alt %u (stream was %s, host last took a "
+                 "frame %s)",
+                 (unsigned)intf->bInterfaceNumber, (unsigned)intf->bAlternateSetting,
+                 streaming ? "on" : "off", taken_ago(ago, sizeof ago));
+        }
+#endif
         /*
          * Selecting the streaming interface starts a session, and it is not
          * always preceded by a commit.
@@ -366,8 +398,11 @@ static void uvc_notify(uint8_t busid, uint8_t event, void* arg) {
         }
     } else if(event == USBD_EVENT_RESET) {
 #ifdef FPV_DEBUG_LOG
-        if(streaming) DLOG("uvc stream ended by a bus reset after %lu frames",
-                           (unsigned long)frames_sent);
+        if(streaming) {
+            char ago[24];
+            DLOG("uvc stream ended by a bus reset, host last took a frame %s",
+                 taken_ago(ago, sizeof ago));
+        }
 #endif
         streaming = 0;
         busy = 0;
@@ -466,7 +501,12 @@ void usbd_video_close(uint8_t busid, uint8_t intf) {
     (void)intf;
     streaming = 0;
     printf("[uvc] streaming off after %lu frames\r\n", (unsigned long)frames_sent);
-    DLOG("uvc streaming off after %lu frames", (unsigned long)frames_sent);
+#ifdef FPV_DEBUG_LOG
+    {
+        char ago[24];
+        DLOG("uvc streaming off, host last took a frame %s", taken_ago(ago, sizeof ago));
+    }
+#endif
 }
 
 /*
@@ -498,7 +538,7 @@ static int uvc_ready(void) {
         flushes++;
         if(flush_run++ == 0)
             DLOG("uvc host is not collecting frames: one waited 1 s and was "
-                 "discarded (sent %lu, %lu KB)", (unsigned long)frames_sent,
+                 "discarded (host has taken %lu frames, %lu KB)", (unsigned long)delivered,
                  (unsigned long)(bytes_sent / 1024u));
 #endif
         /*
@@ -547,10 +587,15 @@ static void uvc_queue(uint32_t slot_base, uint32_t total) {
     busy = 1;
     busy_at = tim_get_cnt(TIM0);
     last_queue_at = busy_at;
+#ifdef FPV_DEBUG_LOG
+    queued++;
+    if(total > frame_max) frame_max = total;
+#endif
     if(usbd_ep_start_write(0, UVC_IN_EP, slot + UVC_HDR_OFF, total) != 0) {
         busy = 0;
         frames_dropped++;
 #ifdef FPV_DEBUG_LOG
+        refused_total++;
         if(refused++ == 0)
             DLOG("uvc endpoint would not take a frame (sent %lu): still holding "
                  "one the host has not collected, or not enabled",
@@ -587,8 +632,20 @@ void usbuvc_on_frame(uint32_t slot_base, uint32_t bitstream_len, int quality) {
      * catches the few still in the ring from before the mode was entered. */
     if(pipeline_slot_height(slot_base) != adv_h) {
         frames_dropped++;
+#ifdef FPV_DEBUG_LOG
+        wrong_height++;
+        if(wrong_run++ == 0)
+            DLOG("uvc frame of 720x%u held back: the stream is 720x%u",
+                 (unsigned)pipeline_slot_height(slot_base), (unsigned)adv_h);
+#endif
         return;
     }
+#ifdef FPV_DEBUG_LOG
+    if(wrong_run) {
+        DLOG("uvc frames of the right size again after %lu held back", (unsigned long)wrong_run);
+        wrong_run = 0;
+    }
+#endif
     {
         /* Say so when the input and the stream stop or start agreeing. */
         static uint8_t told = 0xFF;
@@ -655,6 +712,18 @@ void usbuvc_poll(void) {
     /* A slot this many frames old may already be the producer's again. */
     if(seen_since >= UVC_KEEPALIVE_MAX_AGE) {
         last_valid = 0;
+#ifdef FPV_DEBUG_LOG
+        {
+            /* Once until the host takes a frame again: a host that is not
+             * reading at all brings this about every second. */
+            static uint32_t told_at = 0xFFFFFFFFu;
+            if(told_at != delivered) {
+                told_at = delivered;
+                DLOG("uvc stopped repeating the last frame: %lu newer ones arrived and none "
+                     "could be sent", (unsigned long)seen_since);
+            }
+        }
+#endif
         return;
     }
     if(!uvc_ready()) return;
@@ -666,11 +735,79 @@ void usbuvc_poll(void) {
 }
 
 #ifdef FPV_DEBUG_LOG
+/*
+ * One line a second while the camera streams. Read across, it says where a
+ * frame stopped on its way out:
+ *   in      frames the decoder completed      (0: no signal, or capture stuck)
+ *   enc     frames encoded                    (< in: encoder failing or ring full)
+ *   q       frames handed to the endpoint     (< enc with skip > 0: host slow)
+ *   took    frames the host actually collected (0 while q > 0: host not reading)
+ *   kb/max  bytes collected, largest frame queued
+ *   skip    frames not queued, endpoint still busy with the one before
+ *   flush   frames given up on after waiting 1 s for the host
+ *   refuse  frames the endpoint would not accept
+ *   rep     repeats of the last frame while no new one came
+ *   held    frames of the wrong size held back
+ *   nosig   ms of that second without signal lock
+ *   ctl     control requests from the host
+ *   card    KB the host read / wrote, and its slowest card command in ms
+ *   logms   longest the log itself kept USB waiting
+ */
+void usbuvc_dlog_rate(void) {
+    static uint32_t p_in, p_enc, p_q, p_took, p_kb, p_skip, p_flush, p_ref, p_rep, p_held;
+    static uint32_t p_nosig, p_ctl, p_rd, p_wr;
+    uint32_t in = capture_frames(), enc = pipeline_enc_count(), kb = bytes_sent / 1024u;
+    uint32_t nosig = capture_unlocked_ms(), ctl = musb_dlog_requests;
+    uint32_t rd, wr, op_ms, hold_ms = dlog_hold_max_ms(), fmax = frame_max;
+    uint32_t skip = frames_dropped - refused_total - wrong_height;
+
+    static char prev[200];
+    static uint32_t same = 0;
+    char line[200];
+
+    usbmsc_dlog_counts(&rd, &wr, &op_ms);
+    frame_max = 0;
+    if(streaming) {
+        snprintf(line, sizeof line,
+                 "rate in=%lu enc=%lu q=%lu took=%lu kb=%lu max=%luk skip=%lu flush=%lu "
+                 "refuse=%lu rep=%lu held=%lu nosig=%lu ctl=%lu card=%lu/%lu/%lums",
+                 (unsigned long)(in - p_in), (unsigned long)(enc - p_enc),
+                 (unsigned long)(queued - p_q), (unsigned long)(delivered - p_took),
+                 (unsigned long)(kb - p_kb), (unsigned long)(fmax / 1024u),
+                 (unsigned long)(skip - p_skip), (unsigned long)(flushes - p_flush),
+                 (unsigned long)(refused_total - p_ref), (unsigned long)(keepalives - p_rep),
+                 (unsigned long)(wrong_height - p_held), (unsigned long)(nosig - p_nosig),
+                 (unsigned long)(ctl - p_ctl), (unsigned long)((rd - p_rd) / 2u),
+                 (unsigned long)((wr - p_wr) / 2u), (unsigned long)op_ms);
+        /* A stream with nothing happening - no signal, or a host that has
+         * the camera selected and is not reading - says the same thing
+         * every second. Said once, then counted. The log's own hold time is
+         * left out of the comparison: it wobbles by a millisecond. */
+        if(strcmp(line, prev) == 0) {
+            same++;
+        } else {
+            if(same) DLOG("rate (the line before held for %lu more s)", (unsigned long)same);
+            same = 0;
+            DLOG("%s logms=%lu", line, (unsigned long)hold_ms);
+            strcpy(prev, line);
+        }
+    } else if(same) {
+        DLOG("rate (the line before held for %lu more s)", (unsigned long)same);
+        same = 0;
+        prev[0] = 0;
+    }
+    p_in = in, p_enc = enc, p_q = queued, p_took = delivered, p_kb = kb;
+    p_skip = skip, p_flush = flushes, p_ref = refused_total, p_rep = keepalives;
+    p_held = wrong_height, p_nosig = nosig, p_ctl = ctl, p_rd = rd, p_wr = wr;
+}
+
 void usbuvc_dlog(void) {
-    DLOG("uvc stream=%u busy=%u sent=%lu dropped=%lu repeated=%lu uncollected=%lu kb=%lu",
-         streaming, busy, (unsigned long)frames_sent, (unsigned long)frames_dropped,
-         (unsigned long)keepalives, (unsigned long)flushes,
-         (unsigned long)(bytes_sent / 1024u));
+    char ago[24];
+    DLOG("uvc stream=%u busy=%u taken=%lu queued=%lu uncollected=%lu repeated=%lu kb=%lu "
+         "last taken %s",
+         streaming, busy, (unsigned long)delivered, (unsigned long)queued,
+         (unsigned long)flushes, (unsigned long)keepalives,
+         (unsigned long)(bytes_sent / 1024u), taken_ago(ago, sizeof ago));
 }
 #endif
 

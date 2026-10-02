@@ -40,6 +40,7 @@ uint32_t pipeline_finish_jpeg(uint32_t slot_base, uint32_t bitstream_len, int qu
 /* Lines in the frame held by this slot: what it was encoded as, which is
  * not always what the input had - see the encode start in pipeline.c. */
 uint16_t pipeline_slot_height(uint32_t slot_base);
+uint32_t pipeline_enc_count(void); /* debug build: frames encoded, ever */
 
 /* Newest encoded frame (for the console JPEG dump): returns 0 if none,
  * else fills the physical address of the bitstream and its length. */

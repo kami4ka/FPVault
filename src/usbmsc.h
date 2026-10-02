@@ -17,3 +17,6 @@ void usbmsc_init(void);        /* bring up the USB device controller */
 int usbmsc_host_present(void); /* a host has configured us */
 void usbmsc_set_ready(void);   /* recorder released the card - serve data */
 void usbmsc_stats(void);
+/* Debug build: sectors the host has read and written, ever, and the
+ * longest single card command since last asked, in ms. */
+void usbmsc_dlog_counts(uint32_t* rd, uint32_t* wr, uint32_t* op_max_ms);
