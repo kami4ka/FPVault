@@ -86,13 +86,13 @@ Host test suite: `make -C tests/host` (no cross-toolchain needed).
 ![FPVault board v0.2, back](docs/img/board-v0.2-back.jpg)
 
 The second revision, labelled v0.2 on the silkscreen. Same core and analog
-bypass as board v1 below, with one addition: a `CTRL` pad beside the video
+bypass as board v0.1 below, with one addition: a `CTRL` pad beside the video
 pads, a digital input for starting and stopping the recording from the
 flight controller or a switch. The firmware does not read it yet.
 
-### FPVault board v1
+### FPVault board v0.1
 
-![FPVault board v1](docs/img/board-v1.jpg)
+![FPVault board v0.1](docs/img/board-v1.jpg)
 
 The purpose-built DVR board, 2-layer, four mounting holes. It sits inline
 in the video link: `CVBS_IN` from the camera, `CVBS_OUT` to the VTX. The
