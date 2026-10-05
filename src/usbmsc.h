@@ -15,7 +15,9 @@
 
 void usbmsc_init(void);        /* bring up the USB device controller */
 int usbmsc_host_present(void); /* a host has configured us */
+int usbmsc_card_present(void); /* init found a card; 0 = the reader shows an empty slot */
 void usbmsc_set_ready(void);   /* recorder released the card - serve data */
+void usbmsc_card_lost(void);   /* card stopped answering - show an empty slot instead */
 void usbmsc_stats(void);
 /* Debug build: sectors the host has read and written, ever, and the
  * longest single card command since last asked, in ms. */

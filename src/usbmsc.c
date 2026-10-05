@@ -49,7 +49,8 @@ extern void USBD_IRQHandler(uint8_t busid);
 
 static struct usbd_interface intf0, intf1, intf2, intf3;
 static volatile uint8_t host_present = 0;
-static volatile uint8_t card_ready = 0;
+static volatile uint8_t card_present = 0; /* init found a card in the slot */
+static volatile uint8_t card_ready = 0;   /* recorder released it to the host */
 static volatile uint32_t rd_sectors = 0, wr_sectors = 0;
 
 static void usb_irq(void) {
@@ -147,13 +148,15 @@ void usbd_msc_get_cap(uint8_t busid, uint8_t lun, uint32_t* block_num,
                       uint32_t* block_size) {
     (void)busid;
     (void)lun;
-    /* Capacity is known the moment the recorder has ever mounted the card;
-     * reporting 0 here makes the host cache a dead device and never retry
-     * (observed with macOS). Only the data path waits for the release. */
+    /* Asked exactly once, when the interface is registered, and cached for
+     * the rest of the boot. 0 blocks is an empty slot: the MSC class
+     * answers NOT READY / MEDIUM NOT PRESENT for it, and the host shows a
+     * reader with nothing in it. Only the data path waits for the release. */
     *block_size = 512;
     *block_num = disk_card()->blk_cnt;
-    printf("[usb] get_cap -> %lu blocks (ready=%u)\r\n",
-           (unsigned long)disk_card()->blk_cnt, card_ready);
+    printf("[usb] get_cap -> %lu blocks (%s)\r\n",
+           (unsigned long)disk_card()->blk_cnt,
+           disk_card()->blk_cnt ? "card present" : "empty slot");
 }
 
 #ifdef FPV_DEBUG_LOG
@@ -230,14 +233,20 @@ int usbd_msc_sector_write(uint8_t busid, uint8_t lun, uint32_t sector,
 }
 
 void usbmsc_init(void) {
-    /* CherryUSB caches the capacity ONCE, inside usbd_msc_init_intf below.
-     * The card must therefore be up (raw, no FS) before the interface is
-     * registered - otherwise the host is told "0 blocks" forever and every
-     * READ(10) dies on the stack's own LBA range check. The recorder's
-     * later f_mount re-runs detection; this early init costs ~100 ms. */
+    /* CherryUSB caches the capacity ONCE, inside usbd_msc_init_intf below,
+     * so the card is brought up (raw, no FS) before the interface is
+     * registered: ~100 ms with a card, ~15 ms without. No card means 0
+     * blocks, which the class reports as an empty slot; a card inserted
+     * later needs a re-plug to be seen. */
     extern int disk_raw_init(void);
-    if(disk_raw_init() != 0)
-        printf("[usb] no card at init - exporting 0 blocks\r\n");
+    {
+        uint32_t t0 = tim_get_cnt(TIM0);
+        card_present = disk_raw_init() == 0;
+        uint32_t ms = (uint32_t)(t0 - tim_get_cnt(TIM0)) / (TICKS_PER_SEC / 1000u);
+        if(!card_present)
+            printf("[usb] no card: the reader shows an empty slot (detect took %lu ms)\r\n",
+                   (unsigned long)ms);
+    }
 
     usbuvc_apply_standard(msc_descriptor, sizeof(msc_descriptor));
     usbd_desc_register(0, msc_descriptor);
@@ -260,8 +269,9 @@ void usbmsc_init(void) {
 
 #ifdef FPV_DEBUG_LOG
 void usbmsc_dlog(void) {
-    DLOG("msc host=%u card=%u read=%lu written=%lu sectors", host_present, card_ready,
-         (unsigned long)rd_sectors, (unsigned long)wr_sectors);
+    DLOG("msc host=%u card=%u ready=%u ejected=%u read=%lu written=%lu sectors", host_present,
+         card_present, card_ready, usbd_msc_set_popup(0), (unsigned long)rd_sectors,
+         (unsigned long)wr_sectors);
 }
 #endif
 
@@ -269,14 +279,28 @@ int usbmsc_host_present(void) {
     return host_present;
 }
 
+int usbmsc_card_present(void) {
+    return card_present;
+}
+
 void usbmsc_set_ready(void) {
     card_ready = 1;
     printf("[usb] card released to host\r\n");
 }
 
+void usbmsc_card_lost(void) {
+    card_ready = 0;
+    usbd_msc_set_medium(0, 0, false);
+    printf("[usb] card lost: the reader shows an empty slot\r\n");
+}
+
 void usbmsc_stats(void) {
-    if(host_present)
-        printf("[usb] host attached%s, rd %lu wr %lu sectors\r\n",
-               card_ready ? "" : " (releasing card)", (unsigned long)rd_sectors,
+    if(!host_present) return;
+    if(!card_present)
+        printf("[usb] host attached, no card\r\n");
+    else
+        printf("[usb] host attached%s%s, rd %lu wr %lu sectors\r\n",
+               card_ready ? "" : " (releasing card)",
+               usbd_msc_set_popup(0) ? ", ejected by host" : "", (unsigned long)rd_sectors,
                (unsigned long)wr_sectors);
 }

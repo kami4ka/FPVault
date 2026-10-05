@@ -24,6 +24,9 @@ int usbd_msc_sector_write(uint8_t busid, uint8_t lun, uint32_t sector, uint8_t *
 
 void usbd_msc_set_readonly(uint8_t busid, bool readonly);
 bool usbd_msc_set_popup(uint8_t busid);
+/* FPVault: medium present or not on this LUN; not present = NOT READY,
+ * MEDIUM NOT PRESENT to every data command until restored. */
+void usbd_msc_set_medium(uint8_t busid, uint8_t lun, bool present);
 
 #ifdef __cplusplus
 }

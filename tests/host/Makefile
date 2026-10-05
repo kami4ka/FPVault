@@ -24,6 +24,14 @@ test_jpegtab: test_jpegtab.c ../../src/jpegtab.c ../../src/jpegtab.h
 test_dlog: test_dlog.c ../../src/dlog_core.c ../../src/dlog_core.h
 	$(CC) $(CFLAGS) -o $@ test_dlog.c ../../src/dlog_core.c
 
+# The vendored CherryUSB MSC class builds on the host as-is: plain C, printf
+# logging, no OS layer. The test supplies the port underneath it.
+CHERRY := ../../vendor/cherryusb
+test_msc: test_msc.c $(CHERRY)/class/msc/usbd_msc.c $(CHERRY)/class/msc/usbd_msc.h
+	$(CC) $(CFLAGS) -Wno-unused-parameter -DCONFIG_USB_DBG_LEVEL=1 \
+	    -I$(CHERRY) -I$(CHERRY)/common -I$(CHERRY)/core -I$(CHERRY)/class/msc \
+	    -o $@ test_msc.c $(CHERRY)/class/msc/usbd_msc.c
+
 clean:
 	rm -f $(TESTS) *.avi
 

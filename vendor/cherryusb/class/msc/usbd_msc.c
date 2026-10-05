@@ -35,6 +35,10 @@ USB_NOCACHE_RAM_SECTION struct usbd_msc_priv {
 
     bool readonly;
     bool popup;
+    /* FPVault: the slot may be empty, or the host may have ejected the card.
+     * Either way the LUN answers "medium not present" until the medium
+     * comes back, the way a card reader does. */
+    bool ejected[CONFIG_USBDEV_MSC_MAX_LUN];
     uint8_t sKey; /* Sense key */
     uint8_t ASC;  /* Additional Sense Code */
     uint8_t ASQ;  /* Additional Sense Qualifier */
@@ -119,6 +123,11 @@ void msc_storage_notify_handler(uint8_t busid, uint8_t event, void *arg)
             break;
         case USBD_EVENT_RESET:
             usbd_msc_reset(busid);
+            /* FPVault: a bus reset is a re-plug as far as the medium goes.
+             * Not done in usbd_msc_reset(): that also serves Bulk-Only Mass
+             * Storage Reset, which a host uses to recover from an error and
+             * must not un-eject the card. */
+            memset(g_usbd_msc[busid].ejected, 0, sizeof(g_usbd_msc[busid].ejected));
             break;
         case USBD_EVENT_CONFIGURED:
             USB_LOG_DBG("Start reading cbw\r\n");
@@ -129,6 +138,8 @@ void msc_storage_notify_handler(uint8_t busid, uint8_t event, void *arg)
             break;
     }
 }
+
+static void usbd_msc_send_csw(uint8_t busid, uint8_t CSW_Status);
 
 static void usbd_msc_bot_abort(uint8_t busid)
 {
@@ -186,6 +197,44 @@ static void SCSI_SetSenseData(uint8_t busid, uint32_t KCQ)
     g_usbd_msc[busid].ASQ = (uint8_t)(KCQ);
 }
 
+/* FPVault: a LUN with no blocks is an empty slot; one the host ejected
+ * stays empty until the medium is loaded again or the bus is reset. */
+static bool msc_medium_present(uint8_t busid, uint8_t lun)
+{
+    return g_usbd_msc[busid].scsi_blk_nbr[lun] != 0 && !g_usbd_msc[busid].ejected[lun];
+}
+
+static bool SCSI_noMedium(uint8_t busid)
+{
+    SCSI_SetSenseData(busid, SCSI_KCQNR_MEDIANOTPRESENT);
+    return false;
+}
+
+/* FPVault: finish a command that failed before its data phase so that the
+ * host gets a status it can read. The original stalled the IN pipe and
+ * re-armed the CBW read without ever queuing a CSW; after the host cleared
+ * the halt its CSW read found nothing, and macOS gave the device up (the
+ * READ CAPACITY(16) note below records that). Bulk-only transport, the
+ * "thirteen cases": no data - send the failed CSW; data expected in - an
+ * empty data packet, then the failed CSW with the whole length as residue;
+ * data expected out - stall the OUT pipe (the host clears it) and queue the
+ * failed CSW on the IN pipe meanwhile. */
+static void usbd_msc_cmd_fail(uint8_t busid)
+{
+    struct usbd_msc_priv *m = &g_usbd_msc[busid];
+
+    if (m->cbw.dDataLength == 0) {
+        usbd_msc_send_csw(busid, CSW_STATUS_CMD_FAILED);
+    } else if (m->cbw.bmFlags & 0x80U) {
+        m->csw.bStatus = CSW_STATUS_CMD_FAILED;
+        m->stage = MSC_SEND_CSW;
+        usbd_ep_start_write(busid, mass_ep_data[busid][MSD_IN_EP_IDX].ep_addr, NULL, 0);
+    } else {
+        usbd_ep_set_stall(busid, mass_ep_data[busid][MSD_OUT_EP_IDX].ep_addr);
+        usbd_msc_send_csw(busid, CSW_STATUS_CMD_FAILED);
+    }
+}
+
 /**
  * @brief SCSI Command list
  *
@@ -196,6 +245,9 @@ static bool SCSI_testUnitReady(uint8_t busid, uint8_t **data, uint32_t *len)
     if (g_usbd_msc[busid].cbw.dDataLength != 0U) {
         SCSI_SetSenseData(busid, SCSI_KCQIR_INVALIDCOMMAND);
         return false;
+    }
+    if (!msc_medium_present(busid, g_usbd_msc[busid].cbw.bLUN)) {
+        return SCSI_noMedium(busid);
     }
     *data = NULL;
     *len = 0;
@@ -238,26 +290,6 @@ static bool SCSI_requestSense(uint8_t busid, uint8_t **data, uint32_t *len)
     request_sense[2] = g_usbd_msc[busid].sKey;
     request_sense[12] = g_usbd_msc[busid].ASC;
     request_sense[13] = g_usbd_msc[busid].ASQ;
-#if 0
-    request_sense[ 2] = 0x06;           /* UNIT ATTENTION */
-    request_sense[12] = 0x28;           /* Additional Sense Code: Not ready to ready transition */
-    request_sense[13] = 0x00;           /* Additional Sense Code Qualifier */
-#endif
-#if 0
-    request_sense[ 2] = 0x02;           /* NOT READY */
-    request_sense[12] = 0x3A;           /* Additional Sense Code: Medium not present */
-    request_sense[13] = 0x00;           /* Additional Sense Code Qualifier */
-#endif
-#if 0
-    request_sense[ 2] = 0x05;         /* ILLEGAL REQUEST */
-    request_sense[12] = 0x20;         /* Additional Sense Code: Invalid command */
-    request_sense[13] = 0x00;         /* Additional Sense Code Qualifier */
-#endif
-#if 0
-    request_sense[ 2] = 0x00;         /* NO SENSE */
-    request_sense[12] = 0x00;         /* Additional Sense Code: No additional code */
-    request_sense[13] = 0x00;         /* Additional Sense Code Qualifier */
-#endif
 
     memcpy(*data, (uint8_t *)request_sense, data_len);
     *len = data_len;
@@ -347,14 +379,17 @@ static bool SCSI_startStopUnit(uint8_t busid, uint8_t **data, uint32_t *len)
 
     if ((g_usbd_msc[busid].cbw.CB[4] & 0x3U) == 0x1U) /* START=1 */
     {
-        //SCSI_MEDIUM_UNLOCKED;
+        g_usbd_msc[busid].ejected[g_usbd_msc[busid].cbw.bLUN] = false;
     } else if ((g_usbd_msc[busid].cbw.CB[4] & 0x3U) == 0x2U) /* START=0 and LOEJ Load Eject=1 */
     {
-        //SCSI_MEDIUM_EJECTED;
+        /* FPVault: the eject has to stick. INQUIRY says removable, so the
+         * host keeps asking TEST UNIT READY afterwards, and a LUN that still
+         * says "ready" is simply mounted again. */
         g_usbd_msc[busid].popup = true;
+        g_usbd_msc[busid].ejected[g_usbd_msc[busid].cbw.bLUN] = true;
     } else if ((g_usbd_msc[busid].cbw.CB[4] & 0x3U) == 0x3U) /* START=1 and LOEJ Load Eject=1 */
     {
-        //SCSI_MEDIUM_UNLOCKED;
+        g_usbd_msc[busid].ejected[g_usbd_msc[busid].cbw.bLUN] = false;
     } else {
     }
 
@@ -453,6 +488,9 @@ static bool SCSI_readFormatCapacity(uint8_t busid, uint8_t **data, uint32_t *len
         SCSI_SetSenseData(busid, SCSI_KCQIR_INVALIDCOMMAND);
         return false;
     }
+    if (!msc_medium_present(busid, g_usbd_msc[busid].cbw.bLUN)) {
+        return SCSI_noMedium(busid);
+    }
     uint8_t format_capacity[SCSIRESP_READFORMATCAPACITIES_SIZEOF] = {
         0x00,
         0x00,
@@ -479,6 +517,9 @@ static bool SCSI_readCapacity10(uint8_t busid, uint8_t **data, uint32_t *len)
     if (g_usbd_msc[busid].cbw.dDataLength == 0U) {
         SCSI_SetSenseData(busid, SCSI_KCQIR_INVALIDCOMMAND);
         return false;
+    }
+    if (!msc_medium_present(busid, g_usbd_msc[busid].cbw.bLUN)) {
+        return SCSI_noMedium(busid);
     }
 
     uint8_t capacity10[SCSIRESP_READCAPACITY10_SIZEOF] = {
@@ -511,6 +552,9 @@ static bool SCSI_readCapacity16(uint8_t busid, uint8_t **data, uint32_t *len)
         SCSI_SetSenseData(busid, SCSI_KCQIR_INVALIDCOMMAND);
         return false;
     }
+    if (!msc_medium_present(busid, g_usbd_msc[busid].cbw.bLUN)) {
+        return SCSI_noMedium(busid);
+    }
     capacity16[4] = (uint8_t)(((nbr - 1) >> 24) & 0xff);
     capacity16[5] = (uint8_t)(((nbr - 1) >> 16) & 0xff);
     capacity16[6] = (uint8_t)(((nbr - 1) >> 8) & 0xff);
@@ -530,6 +574,9 @@ static bool SCSI_read10(uint8_t busid, uint8_t **data, uint32_t *len)
     if (((g_usbd_msc[busid].cbw.bmFlags & 0x80U) != 0x80U) || (g_usbd_msc[busid].cbw.dDataLength == 0U)) {
         SCSI_SetSenseData(busid, SCSI_KCQIR_INVALIDCOMMAND);
         return false;
+    }
+    if (!msc_medium_present(busid, g_usbd_msc[busid].cbw.bLUN)) {
+        return SCSI_noMedium(busid);
     }
 
     g_usbd_msc[busid].start_sector = GET_BE32(&g_usbd_msc[busid].cbw.CB[2]); /* Logical Block Address of First Block */
@@ -562,6 +609,9 @@ static bool SCSI_read12(uint8_t busid, uint8_t **data, uint32_t *len)
     if (((g_usbd_msc[busid].cbw.bmFlags & 0x80U) != 0x80U) || (g_usbd_msc[busid].cbw.dDataLength == 0U)) {
         SCSI_SetSenseData(busid, SCSI_KCQIR_INVALIDCOMMAND);
         return false;
+    }
+    if (!msc_medium_present(busid, g_usbd_msc[busid].cbw.bLUN)) {
+        return SCSI_noMedium(busid);
     }
 
     g_usbd_msc[busid].start_sector = GET_BE32(&g_usbd_msc[busid].cbw.CB[2]); /* Logical Block Address of First Block */
@@ -596,6 +646,9 @@ static bool SCSI_write10(uint8_t busid, uint8_t **data, uint32_t *len)
         SCSI_SetSenseData(busid, SCSI_KCQIR_INVALIDCOMMAND);
         return false;
     }
+    if (!msc_medium_present(busid, g_usbd_msc[busid].cbw.bLUN)) {
+        return SCSI_noMedium(busid);
+    }
 
     g_usbd_msc[busid].start_sector = GET_BE32(&g_usbd_msc[busid].cbw.CB[2]); /* Logical Block Address of First Block */
     USB_LOG_DBG("lba: 0x%04x\r\n", g_usbd_msc[busid].start_sector);
@@ -605,6 +658,7 @@ static bool SCSI_write10(uint8_t busid, uint8_t **data, uint32_t *len)
 
     data_len = g_usbd_msc[busid].nsectors * g_usbd_msc[busid].scsi_blk_size[g_usbd_msc[busid].cbw.bLUN];
     if ((g_usbd_msc[busid].start_sector + g_usbd_msc[busid].nsectors) > g_usbd_msc[busid].scsi_blk_nbr[g_usbd_msc[busid].cbw.bLUN]) {
+        SCSI_SetSenseData(busid, SCSI_KCQIR_LBAOUTOFRANGE);
         USB_LOG_ERR("LBA out of range\r\n");
         return false;
     }
@@ -625,6 +679,9 @@ static bool SCSI_write12(uint8_t busid, uint8_t **data, uint32_t *len)
         SCSI_SetSenseData(busid, SCSI_KCQIR_INVALIDCOMMAND);
         return false;
     }
+    if (!msc_medium_present(busid, g_usbd_msc[busid].cbw.bLUN)) {
+        return SCSI_noMedium(busid);
+    }
 
     g_usbd_msc[busid].start_sector = GET_BE32(&g_usbd_msc[busid].cbw.CB[2]); /* Logical Block Address of First Block */
     USB_LOG_DBG("lba: 0x%04x\r\n", g_usbd_msc[busid].start_sector);
@@ -634,6 +691,7 @@ static bool SCSI_write12(uint8_t busid, uint8_t **data, uint32_t *len)
 
     data_len = g_usbd_msc[busid].nsectors * g_usbd_msc[busid].scsi_blk_size[g_usbd_msc[busid].cbw.bLUN];
     if ((g_usbd_msc[busid].start_sector + g_usbd_msc[busid].nsectors) > g_usbd_msc[busid].scsi_blk_nbr[g_usbd_msc[busid].cbw.bLUN]) {
+        SCSI_SetSenseData(busid, SCSI_KCQIR_LBAOUTOFRANGE);
         USB_LOG_ERR("LBA out of range\r\n");
         return false;
     }
@@ -757,6 +815,7 @@ static bool SCSI_CBWDecode(uint8_t busid, uint32_t nbytes)
 
     g_usbd_msc[busid].csw.dTag = g_usbd_msc[busid].cbw.dTag;
     g_usbd_msc[busid].csw.dDataResidue = g_usbd_msc[busid].cbw.dDataLength;
+    g_usbd_msc[busid].csw.bStatus = CSW_STATUS_CMD_PASSED; /* FPVault: a failed command leaves 1 here */
 
     if ((g_usbd_msc[busid].cbw.dSignature != MSC_CBW_Signature) || (g_usbd_msc[busid].cbw.bCBLength < 1) || (g_usbd_msc[busid].cbw.bCBLength > 16)) {
         SCSI_SetSenseData(busid, SCSI_KCQIR_INVALIDCOMMAND);
@@ -827,8 +886,13 @@ static bool SCSI_CBWDecode(uint8_t busid, uint32_t nbytes)
                 usbd_msc_send_csw(busid, CSW_STATUS_CMD_PASSED);
             }
         }
+    } else {
+        /* FPVault: a command the device could not do is still a command it
+         * understood - answer it. Only a CBW that is not a CBW (above)
+         * returns false and gets the stall-until-reset treatment. */
+        usbd_msc_cmd_fail(busid);
     }
-    return ret;
+    return true;
 }
 
 void mass_storage_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes)
@@ -885,7 +949,9 @@ void mass_storage_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
             break;
         /*the device has to send a CSW*/
         case MSC_SEND_CSW:
-            usbd_msc_send_csw(busid, CSW_STATUS_CMD_PASSED);
+            /* FPVault: PASSED unless the command failed before its data
+             * phase, in which case the empty data packet just went out. */
+            usbd_msc_send_csw(busid, g_usbd_msc[busid].csw.bStatus);
             break;
 
         /*the host has received the CSW*/
@@ -965,4 +1031,11 @@ void usbd_msc_set_readonly(uint8_t busid, bool readonly)
 bool usbd_msc_set_popup(uint8_t busid)
 {
     return g_usbd_msc[busid].popup;
+}
+
+/* FPVault: the board withdraws or restores the medium itself - a card that
+ * stopped answering is an empty slot, not an endless hardware error. */
+void usbd_msc_set_medium(uint8_t busid, uint8_t lun, bool present)
+{
+    g_usbd_msc[busid].ejected[lun] = !present;
 }

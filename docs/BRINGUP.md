@@ -45,6 +45,19 @@ arrived, so a cable pull mid-transfer changes nothing. The second or so
 of the burn itself is the only time a power cut can hurt; FEL below is
 the way back if it does.
 
+## Plugging in without a card
+
+The board does not need a card to be a USB device. Without one it still
+enumerates with all three functions: the card reader shows an empty slot
+(no volume in Finder, `diskutil list external` lists nothing; Linux says
+"No medium found", Windows shows a drive with no media), the camera streams
+if one is attached, and DFU updates work. The console says
+`[usb] no card: the reader shows an empty slot`. A card inserted later is
+seen after a re-plug.
+
+Ejecting the card from the computer leaves the slot empty until the board
+is re-plugged, as with any card reader.
+
 ## Flashing over USB — FEL (blank or bricked board, no UART)
 
 FEL is the recovery mode inside the SoC's mask ROM: when the BROM finds no
@@ -165,6 +178,7 @@ anyway because U-Boot stamps its build date in. So the release declares it.
 ## Debug build — a log on the card
 
 For a board that misbehaves somewhere with no serial console to watch.
+With no card nothing is logged; the console says `[dlog] no card`.
 
 ```sh
 make debug        # build-debug/fpvault-debug.bin

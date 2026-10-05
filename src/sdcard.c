@@ -50,12 +50,21 @@ static uint8_t sd_send_if_cond(sdcard_t* card) {
     return 1;
 }
 
+/* CMD55 going unanswered this many times in a row means an empty slot. A
+ * card in idle state answers CMD55 within 64 clocks every time - it has
+ * nothing to be busy with; ACMD41's power-up wait is signalled in the OCR
+ * it returns, never by silence. Ten passes is ~12 ms and rides out a
+ * glitch or two; without the limit an empty slot cost the full 1000 passes,
+ * ~1.3 s, on every detect. */
+#define SD_CMD55_SILENT_MAX 10
+
 static uint8_t sd_send_op_cond(sdcard_t* card) {
     sdc_cmd_t cmd = {0};
     /* A card may stay busy in ACMD41 for up to a second after power-up.
      * The original 100 delay-free retries burned out in ~10 ms; poll with
      * a real delay instead, and keep the watchdog fed. */
     int retries = 1000;
+    int silent = 0;
 
     do {
         wdg_feed();
@@ -63,7 +72,11 @@ static uint8_t sd_send_op_cond(sdcard_t* card) {
         cmd.cmdidx = MMC_APP_CMD;
         cmd.cmdarg = 0;
         cmd.resptype = MMC_RESP_R1;
-        if(!sdc_transfer(card->sdc_base, &cmd, NULL)) continue;
+        if(!sdc_transfer(card->sdc_base, &cmd, NULL)) {
+            if(++silent >= SD_CMD55_SILENT_MAX) return 0;
+            continue;
+        }
+        silent = 0;
 
         cmd.cmdidx = MMC_SD_APP_SEND_OP_COND;
         if(card->voltage & MMC_VDD_27_36)

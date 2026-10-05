@@ -88,9 +88,22 @@ That collapses the design into a boot-time fork (src/main.c):
 
 - `usbmsc_init()` brings the SD card up **raw, no filesystem** first
   (`disk_raw_init`), because CherryUSB caches the reported capacity exactly
-  once, inside `usbd_msc_init_intf`. Registering the interface with the
-  card down tells the host "0 blocks" forever and every READ(10) then dies
-  on the stack's own LBA range check - found the hard way.
+  once, inside `usbd_msc_init_intf`, for the whole boot. No card means 0
+  blocks, and the MSC class treats 0 blocks as an empty slot: TEST UNIT
+  READY, READ CAPACITY, READ and WRITE all answer NOT READY / MEDIUM NOT
+  PRESENT, which every host OS shows as a card reader with nothing in it.
+  A card inserted later is seen after a re-plug. The same state serves the
+  host's eject: START STOP UNIT with LoEj marks the medium ejected until
+  the bus is reset, so Finder's eject sticks instead of remounting a second
+  later. A detect without a card costs ~15 ms (CMD55 unanswered ten times
+  in a row ends it), so an empty slot delays nothing.
+- A command the class cannot do ends in a failed CSW, never a stalled pipe
+  with nothing behind it: an empty data packet first when the host expected
+  data in, a stall of the OUT pipe when it expected to send. The stock
+  class stalled IN and re-armed the CBW read without queuing a CSW; the
+  host's CSW read then found nothing and macOS abandoned the device. Only a
+  malformed CBW still takes the stall-until-reset path the spec asks for.
+  tests/host/test_msc.c runs the class against a fake port and pins this.
 - After init, main waits up to 2.5 s for a SET_CONFIGURATION from a host.
   A charger or a flight controller's 5 V rail never configures, so in the
   air the window expires and recording starts ~2 s late - the entire cost

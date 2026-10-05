@@ -16,3 +16,10 @@ desktop/out/
 desktop/dist/
 desktop/resources/bin/
 desktop/test/fixtures/*.avi
+
+# --- tests/host: built test binaries and their output ---
+tests/host/test_msc
+tests/host/test_dlog
+tests/host/test_uvcdesc
+tests/host/*.dSYM/
+tests/host/test_out.avi

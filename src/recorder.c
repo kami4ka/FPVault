@@ -193,14 +193,22 @@ void recorder_task(void) {
      * source, so "host detached" equals "reboot" - no way back needed. */
     if(usbmsc_host_present() && state != REC_USB_MODE) {
         extern int disk_raw_init(void);
+        int was_mounted = sdtest_is_mounted();
         clip_stop();
         sdtest_unmount();
-        /* Raw card init (no FS) - in pure-reader boots the recorder never
-         * mounted, so the SD hardware needs bringing up here. */
-        if(disk_raw_init() == 0)
+        /* In the normal host boot nothing has touched the card since
+         * usbmsc_init brought it up raw, so it is handed over as it is.
+         * Only a host that showed up after the recorder had the card
+         * mounted gets a fresh raw init. No card at init: the reader
+         * already shows an empty slot, nothing to hand over. */
+        if(!usbmsc_card_present())
+            printf("[rec] USB mode, no card: the reader shows an empty slot\r\n");
+        else if(!was_mounted || disk_raw_init() == 0)
             usbmsc_set_ready();
-        else
-            printf("[rec] USB mode but no card responds\r\n");
+        else {
+            printf("[rec] USB mode but the card no longer responds\r\n");
+            usbmsc_card_lost();
+        }
         dlog_activate();
         enter(REC_USB_MODE);
         return;
@@ -213,8 +221,11 @@ void recorder_task(void) {
             break;
         }
         if(since_us(t_mount_try) > 2000000u) {
-            t_mount_try = now();
             sdtest_mount(); /* prints its own result */
+            /* Measured from the end of the attempt: a detect that fails
+             * blocks the loop, and the console and the FC link get the
+             * whole 2 s between attempts, not what a detect left over. */
+            t_mount_try = now();
             if(sdtest_is_mounted()) enter(REC_WAIT_SIGNAL);
         }
         break;
