@@ -36,13 +36,19 @@
 #define FW_VERSION_BCD                                                        \
     ((FW_VERSION_MAJOR << 8) | (FW_VERSION_MINOR << 4) | FW_VERSION_PATCH)
 
-/* Appended to the version wherever it is shown, so a debug build can never be
- * taken for the normal one. */
+/* Appended to the version wherever it is shown, so a debug or card-less
+ * build can never be taken for the normal one. */
 #ifdef FPV_DEBUG_LOG
-#define FW_BUILD_KIND "-debug"
+#define FW_KIND_DEBUG "-debug"
 #else
-#define FW_BUILD_KIND ""
+#define FW_KIND_DEBUG ""
 #endif
+#ifdef FPV_NO_SD
+#define FW_KIND_NOSD "-nosd"
+#else
+#define FW_KIND_NOSD ""
+#endif
+#define FW_BUILD_KIND FW_KIND_DEBUG FW_KIND_NOSD
 
 #define FW_VERSION_STR "0.9.8"
 

@@ -42,6 +42,18 @@ DEFS += -DFPV_DEBUG_LOG
 SRCS += src/dlog.c src/dlog_core.c
 endif
 
+# ---- card-less build -------------------------------------------------------
+# make nosd  ->  build-nosd/fpvault-nosd.bin
+# The same firmware with the SD card compiled out: the slot always reads as
+# empty, whatever is in it, and the card hardware is never touched. For
+# telling a card problem from a USB one - a board that streams fine on this
+# build but not on the normal one has a card to blame. Combines with debug.
+NO_SD ?= 0
+ifeq ($(NO_SD),1)
+PROJECT_NAME := $(PROJECT_NAME)-nosd
+DEFS += -DFPV_NO_SD
+endif
+
 INCLUDES += -Ivendor/fatfs -Ivendor/cherryusb -Ivendor/cherryusb/common \
             -Ivendor/cherryusb/core -Ivendor/cherryusb/class/msc \
             -Ivendor/cherryusb/class/video \
@@ -104,4 +116,11 @@ debug:
 dfu-debug: debug
 	dfu-util -d 34b7:f1c2 -a 0 -D build-debug/fpvault-debug.bin
 
-.PHONY: deploy dfu debug dfu-debug
+# ---- card-less build, likewise in its own directory -------------------------
+nosd:
+	$(MAKE) NO_SD=1 BUILDDIR=build-nosd
+
+dfu-nosd: nosd
+	dfu-util -d 34b7:f1c2 -a 0 -D build-nosd/fpvault-nosd.bin
+
+.PHONY: deploy dfu debug dfu-debug nosd dfu-nosd

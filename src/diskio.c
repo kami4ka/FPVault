@@ -53,6 +53,13 @@ DSTATUS disk_status(BYTE pdrv) {
 DSTATUS disk_initialize(BYTE pdrv) {
     if(pdrv != DEV_MMC) return STA_NOINIT;
 
+#ifdef FPV_NO_SD
+    /* Card-less build: the slot is empty whatever is in it. Nothing below
+     * runs, so the card hardware is never clocked, muxed or spoken to. */
+    dstat = STA_NOINIT;
+    return dstat;
+#endif
+
     clk_reset_set(CCU_BUS_SOFT_RST0, 8);
     clk_enable(CCU_BUS_CLK_GATE0, 8);
     clk_reset_clear(CCU_BUS_SOFT_RST0, 8);

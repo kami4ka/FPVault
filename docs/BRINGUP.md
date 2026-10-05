@@ -217,6 +217,19 @@ then copy `FPVLOG.TXT` off the card.
 `fpvault-<tag>-debug.bin`. FPVault Desktop installs only `fpvault-<tag>.bin`;
 the debug image goes on with `dfu-util` or over FEL.
 
+## Card-less build — is it the card?
+
+```sh
+make nosd         # build-nosd/fpvault-nosd.bin
+make dfu-nosd     # build it and install over USB
+```
+
+The same firmware with the SD card compiled out: the slot always reads as
+empty whatever is in it, and the card hardware is never touched. The banner
+and the DFU name say `0.9.x-nosd`. A board that streams fine on this build
+but not on the normal one has a card to blame; one that fails on both does
+not. It records nothing, so it is a diagnostic, not a release.
+
 ## M1 — VE first light (go/no-go)
 
 The one genuinely open silicon question: does the Cedar VE's JPEG encoder
