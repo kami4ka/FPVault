@@ -95,8 +95,8 @@ That collapses the design into a boot-time fork (src/main.c):
   A card inserted later is seen after a re-plug. The same state serves the
   host's eject: START STOP UNIT with LoEj marks the medium ejected until
   the bus is reset, so Finder's eject sticks instead of remounting a second
-  later. A detect without a card costs ~15 ms (CMD55 unanswered ten times
-  in a row ends it), so an empty slot delays nothing.
+  later. A detect without a card costs ~250 ms (CMD55 unanswered 200 times
+  in a row ends it), so an empty slot delays next to nothing.
 - A command the class cannot do ends in a failed CSW, never a stalled pipe
   with nothing behind it: an empty data packet first when the host expected
   data in, a stall of the OUT pipe when it expected to send. The stock

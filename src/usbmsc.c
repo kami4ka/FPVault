@@ -235,7 +235,7 @@ int usbd_msc_sector_write(uint8_t busid, uint8_t lun, uint32_t sector,
 void usbmsc_init(void) {
     /* CherryUSB caches the capacity ONCE, inside usbd_msc_init_intf below,
      * so the card is brought up (raw, no FS) before the interface is
-     * registered: ~100 ms with a card, ~15 ms without. No card means 0
+     * registered: ~100 ms with a card, ~250 ms without. No card means 0
      * blocks, which the class reports as an empty slot; a card inserted
      * later needs a re-plug to be seen. */
     extern int disk_raw_init(void);

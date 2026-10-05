@@ -34,6 +34,19 @@ static uint8_t
 static uint8_t sdc_transfer_data(uint32_t sdc_base, sdc_cmd_t* cmd, sdc_data_t* dat);
 static uint8_t sdc_update_clock(uint32_t sdc_base);
 
+/* After a command fails: reset the controller, forget the interrupt, and
+ * start the card clock again. The reset stops the clock, and without the
+ * clock no later command can finish OR time out - it just sits at its
+ * 500 ms wall-clock guard. With no card in the slot that turned every one
+ * of the detect's hundreds of expected failures into half a second, the
+ * main loop vanished for two minutes and the LED froze solid. U-Boot's
+ * sunxi driver re-issues the clock after this very reset; so do we. */
+static void sdc_recover(uint32_t sdc_base) {
+    write32(sdc_base + SDC_GCTL, SDC_HARDWARE_RESET);
+    write32(sdc_base + SDC_RISR, 0xFFFFFFFF);
+    sdc_update_clock(sdc_base);
+}
+
 static uint8_t sdc_transfer_command(uint32_t sdc_base, sdc_cmd_t* cmd, sdc_data_t* dat) {
     uint32_t cmdval = SDC_START;
     uint32_t status = 0;
@@ -45,8 +58,7 @@ static uint8_t sdc_transfer_command(uint32_t sdc_base, sdc_cmd_t* cmd, sdc_data_
             wdg_feed();
             status = read32(sdc_base + SDC_STAR);
             if(sdc_elapsed(t0) > SDC_MS(2000)) {
-                write32(sdc_base + SDC_GCTL, SDC_HARDWARE_RESET);
-                write32(sdc_base + SDC_RISR, 0xFFFFFFFF);
+                sdc_recover(sdc_base);
                 return 0;
             }
         } while(status & SDC_CARD_DATA_BUSY);
@@ -79,8 +91,7 @@ static uint8_t sdc_transfer_command(uint32_t sdc_base, sdc_cmd_t* cmd, sdc_data_
             wdg_feed();
             status = read32(sdc_base + SDC_RISR);
             if(sdc_elapsed(t0) > SDC_MS(500) || (status & SDC_INTERRUPT_ERROR_BIT)) {
-                write32(sdc_base + SDC_GCTL, SDC_HARDWARE_RESET);
-                write32(sdc_base + SDC_RISR, 0xFFFFFFFF);
+                sdc_recover(sdc_base);
                 return 0;
             }
         } while(!(status & SDC_COMMAND_DONE));
@@ -92,8 +103,7 @@ static uint8_t sdc_transfer_command(uint32_t sdc_base, sdc_cmd_t* cmd, sdc_data_
             wdg_feed();
             status = read32(sdc_base + SDC_STAR);
             if(sdc_elapsed(t0) > SDC_MS(2000)) {
-                write32(sdc_base + SDC_GCTL, SDC_HARDWARE_RESET);
-                write32(sdc_base + SDC_RISR, 0xFFFFFFFF);
+                sdc_recover(sdc_base);
                 return 0;
             }
         } while(status & SDC_CARD_DATA_BUSY);
