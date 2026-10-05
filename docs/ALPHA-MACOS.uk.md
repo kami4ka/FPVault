@@ -7,7 +7,7 @@
 Є також окремі інструкції для [Windows](ALPHA-WINDOWS.uk.md) і
 [Linux](ALPHA-LINUX.uk.md).
 
-Актуальна версія прошивки на момент написання — **v0.9.8**.
+Актуальна версія прошивки на момент написання — **v0.9.9**.
 
 > **Застосунок FPVault Desktop поки не використовуйте.** Він не підписаний
 > сертифікатом, і Gatekeeper його блокуватиме. Для першої прошивки він усе
@@ -37,11 +37,11 @@
 
 | файл | що це | куди пишеться |
 |---|---|---|
-| `u-boot-sunxi-with-spl-v0.9.8.bin` | завантажувач | у NOR за адресою `0` |
-| `fpvault-v0.9.8.bin` | прошивка | у NOR за адресою `0x100000` (1 МБ) |
+| `u-boot-sunxi-with-spl-v0.9.9.bin` | завантажувач | у NOR за адресою `0` |
+| `fpvault-v0.9.9.bin` | прошивка | у NOR за адресою `0x100000` (1 МБ) |
 
 > Імена файлів містять версію релізу. Якщо ви завантажили новіший реліз,
-> підставляйте в команди його імена — наприклад `fpvault-v0.9.9.bin`. Так
+> підставляйте в команди його імена — наприклад `fpvault-v0.9.10.bin`. Так
 > завжди видно, який саме файл ви пишете на плату.
 
 Потрібні **обидва**. Завантажувач містить виправлення, без якого плата
@@ -161,8 +161,8 @@ sunxi-fel spiflash-info
 Тепер два записи — **спочатку завантажувач, потім прошивка**:
 
 ```sh
-sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl-v0.9.8.bin
-sunxi-fel -p spiflash-write 0x100000 fpvault-v0.9.8.bin
+sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl-v0.9.9.bin
+sunxi-fel -p spiflash-write 0x100000 fpvault-v0.9.9.bin
 ```
 
 `-p` показує смужку прогресу. Завантажувач (≈415 КБ) пишеться близько
@@ -290,7 +290,7 @@ SD (220 мкФ на стенді прибрали всі три відомі с�
 таки, ставити нічого не потрібно.
 
 ```sh
-dfu-util -d 34b7:f1c2 -a 0 -D fpvault-v0.9.8.bin
+dfu-util -d 34b7:f1c2 -a 0 -D fpvault-v0.9.9.bin
 ```
 
 Плата сама перевіряє образ, записує його, зчитує назад для звірки і лише
@@ -322,7 +322,7 @@ dfu-util -d 34b7:f1c2 -a 0 -D fpvault-v0.9.8.bin
 плата майже напевно вийшла з FEL.
 
 **Плата не вмикається без послідовного перехідника.** Записаний старий
-або непропатчений завантажувач. Перезапишіть `u-boot-sunxi-with-spl-v0.9.8.bin`
+або непропатчений завантажувач. Перезапишіть `u-boot-sunxi-with-spl-v0.9.9.bin`
 саме з релізу.
 
 **Плата не записує, хоча картка вставлена.** Швидше за все вона
@@ -424,8 +424,8 @@ cd sunxi-tools && make tools && make install-tools PREFIX=$(brew --prefix)
 cd ~/Downloads
 sunxi-fel ver
 sunxi-fel spiflash-info
-sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl-v0.9.8.bin
-sunxi-fel -p spiflash-write 0x100000 fpvault-v0.9.8.bin
+sunxi-fel -p spiflash-write 0        u-boot-sunxi-with-spl-v0.9.9.bin
+sunxi-fel -p spiflash-write 0x100000 fpvault-v0.9.9.bin
 ```
 
 Перезавантажити живлення — і плата готова.
