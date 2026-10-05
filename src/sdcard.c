@@ -51,12 +51,12 @@ static uint8_t sd_send_if_cond(sdcard_t* card) {
 }
 
 /* CMD55 going unanswered this many times in a row means an empty slot. A
- * card in idle state answers CMD55 within 64 clocks every time - it has
- * nothing to be busy with; ACMD41's power-up wait is signalled in the OCR
- * it returns, never by silence. Ten passes is ~12 ms and rides out a
- * glitch or two; without the limit an empty slot cost the full 1000 passes,
- * ~1.3 s, on every detect. */
-#define SD_CMD55_SILENT_MAX 10
+ * card in idle state answers CMD55 within 64 clocks - its power-up wait is
+ * signalled in the OCR that ACMD41 returns, not by silence - so ten passes
+ * would do. 200 passes, ~250 ms, is a margin for a card that takes its time
+ * after a power cut; an empty slot still costs that instead of the full
+ * 1000 passes, ~1.3 s, on every detect. */
+#define SD_CMD55_SILENT_MAX 200
 
 static uint8_t sd_send_op_cond(sdcard_t* card) {
     sdc_cmd_t cmd = {0};
