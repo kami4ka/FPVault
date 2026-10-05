@@ -100,6 +100,9 @@ F1C200s.
 із відеомайданчиками — цифровий вхід для вмикання і вимикання запису з
 польотного контролера чи перемикача. Прошивка його поки не читає.
 
+Схема: [PDF](docs/hw/fpvault-board-v0.2-schematic.pdf) ·
+[PNG](docs/hw/fpvault-board-v0.2-schematic.png)
+
 ### Плата FPVault v0.1
 
 ![Плата FPVault v0.1](docs/img/board-v1.jpg)

@@ -90,6 +90,9 @@ bypass as board v0.1 below, with one addition: a `CTRL` pad beside the video
 pads, a digital input for starting and stopping the recording from the
 flight controller or a switch. The firmware does not read it yet.
 
+Schematic: [PDF](docs/hw/fpvault-board-v0.2-schematic.pdf) ·
+[PNG](docs/hw/fpvault-board-v0.2-schematic.png)
+
 ### FPVault board v0.1
 
 ![FPVault board v0.1](docs/img/board-v1.jpg)
